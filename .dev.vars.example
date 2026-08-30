@@ -1,0 +1,5 @@
+# Local Worker runs (`npm run cf:preview` / `wrangler dev`) read secrets from
+# .dev.vars, not from your shell or .env.local. Copy this to .dev.vars.
+DATABASE_URL="postgresql://USER:PASSWORD@ep-xxxx-pooler.REGION.aws.neon.tech/neondb?sslmode=require"
+ADMIN_PASSWORD="change-me"
+SESSION_SECRET="change-me-to-32-plus-random-bytes"
