@@ -12,6 +12,9 @@
   // Media uploads. Using a binding rather than the S3 API means no access keys
   // to manage, and `wrangler dev` gives a real local bucket on disk.
   // Create it once with: npx wrangler r2 bucket create topsailcashew-blog-media
+  //
+  // Add "remote": true here to make `next dev` read and write the *real*
+  // bucket instead of the local one.
   "r2_buckets": [
     {
       "binding": "MEDIA_BUCKET",

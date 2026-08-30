@@ -70,7 +70,11 @@ describe("authorize", () => {
 
   it("fails closed with 500 when SESSION_SECRET is unset", async () => {
     const previous = process.env.SESSION_SECRET;
-    delete process.env.SESSION_SECRET;
+    // The generated CloudflareEnv types now declare SESSION_SECRET as a
+    // required string (wrangler reads the deployed Worker's secret names), so
+    // the delete needs a looser view of process.env. Assigning `undefined`
+    // would not do — Node coerces that to the string "undefined".
+    delete (process.env as Record<string, string | undefined>).SESSION_SECRET;
     try {
       const token = await createSessionToken(SECRET);
       const result = await authorize(request(`${SESSION_COOKIE}=${token}`));
