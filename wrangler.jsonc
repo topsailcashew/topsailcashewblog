@@ -1,32 +1,52 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "main": ".open-next/worker.js",
-  "name": "topsailcashew-blog",
-  // Must be >= 2024-09-23 for the Node compat the Next runtime needs.
-  "compatibility_date": "2025-08-01",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS"
-  },
-  // Media uploads. Using a binding rather than the S3 API means no access keys
-  // to manage, and `wrangler dev` gives a real local bucket on disk.
-  // Create it once with: npx wrangler r2 bucket create topsailcashew-blog-media
-  //
-  // Add "remote": true here to make `next dev` read and write the *real*
-  // bucket instead of the local one.
-  "r2_buckets": [
-    {
-      "binding": "MEDIA_BUCKET",
-      "bucket_name": "topsailcashew-blog-media",
-      "preview_bucket_name": "topsailcashew-blog-media-preview"
-    }
-  ],
-  "observability": {
-    "enabled": true
-  }
-  // Secrets are NOT set here — this file is committed. Set them with:
-  //   npx wrangler secret put DATABASE_URL
-  //   npx wrangler secret put ADMIN_PASSWORD
-  //   npx wrangler secret put SESSION_SECRET
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"main": ".open-next/worker.js",
+	"name": "topsailcashew-blog",
+	// Must be >= 2024-09-23 for the Node compat the Next runtime needs.
+	"compatibility_date": "2025-08-01",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	// Media uploads. Using a binding rather than the S3 API means no access keys
+	// to manage, and `wrangler dev` gives a real local bucket on disk.
+	// Create it once with: npx wrangler r2 bucket create topsailcashew-blog-media
+	//
+	// Add "remote": true here to make `next dev` read and write the *real*
+	// bucket instead of the local one.
+	"r2_buckets": [
+		{
+			"binding": "MEDIA_BUCKET",
+			"bucket_name": "topsailcashew-blog-media",
+			"preview_bucket_name": "topsailcashew-blog-media-preview"
+		}
+	],
+	// ISR cache for the public reading pages: rendered HTML plus the cache tags
+	// that `revalidatePath` invalidates. Create them once with:
+	//   npx wrangler kv namespace create NEXT_INC_CACHE_KV
+	//   npx wrangler kv namespace create NEXT_TAG_CACHE_KV
+	// then paste the returned ids below.
+	"kv_namespaces": [
+		{
+			"binding": "NEXT_INC_CACHE_KV",
+			"id": "d6c9856f151d4a8c8e0765737a051363",
+			"remote": true
+		},
+		{
+			"binding": "NEXT_TAG_CACHE_KV",
+			"id": "980f2f1a411442dbb9c351a6d791c843",
+			"remote": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
+	// Secrets are NOT set here — this file is committed. Set them with:
+	//   npx wrangler secret put DATABASE_URL
+	//   npx wrangler secret put ADMIN_PASSWORD
+	//   npx wrangler secret put SESSION_SECRET
 }

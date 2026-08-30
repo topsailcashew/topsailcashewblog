@@ -79,13 +79,34 @@ export async function createPost(
   return serializePost(row, tags);
 }
 
+/** What the post looked like before an update, for cache invalidation. */
+export type PreviousPostState = {
+  slug: string;
+  status: PostStatus;
+  tagSlugs: string[];
+};
+
+export type UpdatePostResult = {
+  post: SerializedPost;
+  previous: PreviousPostState;
+};
+
 export async function updatePost(
   db: BlogDatabase,
   id: string,
   input: UpdatePostInput,
-): Promise<SerializedPost> {
+): Promise<UpdatePostResult> {
   const [existing] = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
   if (!existing) throw notFound("Post");
+
+  // Captured before anything is written: a rename or a retag has to invalidate
+  // the URLs the post used to occupy as well as the ones it moves to.
+  const previousTags = (await getTagsForPosts(db, [id])).get(id) ?? [];
+  const previous: PreviousPostState = {
+    slug: existing.slug,
+    status: existing.status,
+    tagSlugs: previousTags.map((tag) => tag.slug),
+  };
 
   const patch: Partial<typeof posts.$inferInsert> = {};
   if (input.title !== undefined) patch.title = input.title.trim();
@@ -119,11 +140,9 @@ export async function updatePost(
         ? await applyPatch(db, id, patch)
         : existing;
 
-  const tags = input.tags
-    ? await syncPostTags(db, id, input.tags)
-    : ((await getTagsForPosts(db, [id])).get(id) ?? []);
+  const tags = input.tags ? await syncPostTags(db, id, input.tags) : previousTags;
 
-  return serializePost(row, tags);
+  return { post: serializePost(row, tags), previous };
 }
 
 export async function deletePost(db: BlogDatabase, id: string): Promise<void> {

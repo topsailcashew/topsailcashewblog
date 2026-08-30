@@ -1,36 +1,417 @@
-/* Deliberately minimal. The typography pass belongs to Phase 3. */
+/* ===========================================================================
+   Tokens
+   ========================================================================= */
+
 :root {
   color-scheme: light dark;
-  --border: color-mix(in srgb, currentColor 20%, transparent);
-  --muted: color-mix(in srgb, currentColor 60%, transparent);
+
+  --bg: #fdfcfa;
+  --surface: #ffffff;
+  --fg: #1b1a17;
+  --fg-muted: #6d6a63;
+  /* 4.7:1 on --bg. #8d8a82 read better but only reached 3.4:1, and this is
+     the date and reading-time line on every page, not decoration. */
+  --fg-subtle: #767268;
+  --rule: #e6e2da;
+  --rule-strong: #d5d0c5;
+  --link: #1c5d4a;
+  --link-hover: #123f32;
+  --selection: #d9ece4;
+
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --serif: var(--font-serif), ui-serif, Charter, Georgia, "Times New Roman",
+    serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Medium's single-column measure. Wide enough for long sentences, narrow
+     enough that the eye does not lose the line on the return sweep. */
+  --measure: 42rem;
+
+  /* Aliases kept so the Phase 2 admin styles keep working unchanged. */
+  --border: var(--rule);
+  --muted: var(--fg-muted);
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15140f;
+    --surface: #1c1b16;
+    --fg: #eae7df;
+    --fg-muted: #a8a49a;
+    --fg-subtle: #86827a;
+    --rule: #322f28;
+    --rule-strong: #45413a;
+    --link: #7fc9ad;
+    --link-hover: #a5ddc7;
+    --selection: #234136;
+  }
+}
+
+/* ===========================================================================
+   Base
+   ========================================================================= */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
-  margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
-  max-width: 46rem;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
   line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
+::selection { background: var(--selection); }
+
+a { color: inherit; }
+img { max-width: 100%; height: auto; }
+
+h1, h2, h3 { line-height: 1.2; }
 h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 h2 { font-size: 1rem; margin: 0; }
-a { color: inherit; }
-.muted { color: var(--muted); font-size: 0.875rem; }
+
+.muted { color: var(--fg-muted); font-size: 0.875rem; }
 .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-.card { border: 1px solid var(--border); border-radius: 6px; padding: 0.875rem 1rem; margin-bottom: 0.75rem; }
-.pill { border: 1px solid var(--border); border-radius: 999px; padding: 0.05rem 0.5rem; font-size: 0.75rem; }
+.card { border: 1px solid var(--rule); border-radius: 6px; padding: 0.875rem 1rem; margin-bottom: 0.75rem; }
+.pill { border: 1px solid var(--rule); border-radius: 999px; padding: 0.05rem 0.5rem; font-size: 0.75rem; }
 button { font: inherit; padding: 0.25rem 0.6rem; cursor: pointer; }
-input { font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: inherit; }
+input, textarea { font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--rule); border-radius: 4px; background: transparent; color: inherit; }
 form { margin-bottom: 1.5rem; }
 .error { color: #c0392b; }
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: 0 0 6px 0;
+  z-index: 10;
+}
+.skip-link:focus { left: 0; }
+
+/* ===========================================================================
+   Public site
+   ========================================================================= */
+
+.site {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.site-main { flex: 1; }
+
+.wrap {
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding-inline: 1.5rem;
+}
+
+@media (max-width: 30rem) {
+  .wrap { padding-inline: 1.15rem; }
+}
+
+/* --- header / footer ----------------------------------------------------- */
+
+.site-header {
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 3.5rem;
+}
+.site-header .wrap {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1.5rem;
+}
+.site-title {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+.site-title:hover { color: var(--link); }
+.site-nav {
+  display: flex;
+  gap: 1.25rem;
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.site-nav a { text-decoration: none; }
+.site-nav a:hover { color: var(--fg); }
+
+.site-footer {
+  margin-top: 5rem;
+  border-top: 1px solid var(--rule);
+  color: var(--fg-muted);
+  font-size: 0.8125rem;
+}
+.site-footer .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  justify-content: space-between;
+  padding-block: 1.75rem;
+}
+.site-footer a { color: inherit; }
+
+/* --- feed ---------------------------------------------------------------- */
+
+.feed-intro { margin-bottom: 3rem; }
+.feed-intro h1 {
+  font-family: var(--serif);
+  font-size: clamp(1.75rem, 5vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5rem;
+}
+.feed-intro p { color: var(--fg-muted); margin: 0; font-size: 1rem; }
+
+.feed { list-style: none; margin: 0; padding: 0; }
+
+.feed-item + .feed-item {
+  margin-top: 3rem;
+  padding-top: 3rem;
+  border-top: 1px solid var(--rule);
+}
+
+.feed-item-title {
+  font-family: var(--serif);
+  font-size: 1.625rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6rem;
+}
+.feed-item-title a { text-decoration: none; }
+.feed-item-title a:hover { color: var(--link); }
+
+.feed-item-excerpt {
+  font-family: var(--serif);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--fg-muted);
+  margin: 0 0 0.9rem;
+}
+
+.feed-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 1.1rem;
+  background: var(--surface);
+}
+
+/* --- byline / meta ------------------------------------------------------- */
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--fg-subtle);
+}
+.meta-dot { color: var(--rule-strong); }
+
+.tag-list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.tag {
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+  color: var(--fg-muted);
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  white-space: nowrap;
+}
+.tag:hover { border-color: var(--rule-strong); color: var(--fg); }
+
+/* --- pagination ---------------------------------------------------------- */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 4rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.875rem;
+}
+.pagination a { color: var(--link); text-decoration: none; }
+.pagination a:hover { text-decoration: underline; }
+.pagination-position { color: var(--fg-subtle); }
+
+/* --- post page ----------------------------------------------------------- */
+
+.post-header { margin-bottom: 2.5rem; }
+.post-title {
+  font-family: var(--serif);
+  font-size: clamp(2rem, 6vw, 2.85rem);
+  font-weight: 700;
+  line-height: 1.13;
+  letter-spacing: -0.025em;
+  margin: 0 0 0.9rem;
+  text-wrap: balance;
+}
+.post-standfirst {
+  font-family: var(--serif);
+  font-size: 1.1875rem;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  margin: 0 0 1.25rem;
+}
+.post-cover {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+  margin: 2.5rem 0 0;
+}
+
+.post-footer {
+  margin-top: 4rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+}
+.post-footer a { color: var(--link); text-decoration: none; font-size: 0.875rem; }
+.post-footer a:hover { text-decoration: underline; }
+
+/* --- long-form prose ----------------------------------------------------- */
+
+.prose {
+  font-family: var(--serif);
+  font-size: 1.1875rem;
+  line-height: 1.75;
+  color: var(--fg);
+  overflow-wrap: break-word;
+}
+
+.prose > * { margin-block: 0; }
+/* rem, not em: `em` resolves against the *child's* size, so the gap above a
+   code block or caption would shrink and break the vertical rhythm. */
+.prose > * + * { margin-top: 1.9rem; }
+
+/* Nested paragraphs (inside quotes and list items) keep their own rhythm.
+   Scoped deliberately: a bare `.prose p { margin: 0 }` outranks the sibling
+   rule above and silently flattens the space between paragraphs. */
+.prose :is(blockquote, li) > p { margin: 0; }
+
+.prose h1, .prose h2, .prose h3 {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+.prose > h1 { font-size: 1.85em; margin-top: 2em; }
+.prose > h2 { font-size: 1.45em; margin-top: 2em; }
+.prose > h3 { font-size: 1.2em;  margin-top: 1.8em; }
+.prose > :is(h1, h2, h3) + * { margin-top: 0.85rem; }
+
+.prose a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+  text-decoration-color: color-mix(in srgb, var(--link) 45%, transparent);
+}
+.prose a:hover { color: var(--link-hover); text-decoration-color: currentColor; }
+
+.prose strong { font-weight: 700; }
+
+.prose blockquote {
+  margin: 2em 0;
+  padding-left: 1.35em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--fg-muted);
+  font-style: italic;
+}
+.prose blockquote > p + p { margin-top: 1em; }
+
+.prose ul, .prose ol { padding-left: 1.4em; }
+.prose li + li { margin-top: 0.5em; }
+.prose li > p + p { margin-top: 0.8em; }
+
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+.prose pre {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  padding: 1rem 1.15rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  border: 1px solid var(--rule);
+}
+.prose pre code { background: none; padding: 0; font-size: inherit; }
+
+.prose img {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+  margin-block: 2.25em;
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin-block: 3em;
+}
+
+/* --- empty / error states ------------------------------------------------ */
+
+.notice {
+  font-family: var(--serif);
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--fg-muted);
+}
+.notice h1 {
+  font-family: var(--serif);
+  font-size: clamp(1.75rem, 5vw, 2.25rem);
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0 0 0.75rem;
+}
+.notice a { color: var(--link); }
 
 /* ---------------------------------------------------------------------------
    Admin chrome. Functional, not precious — the public typography pass is
    Phase 3 and lives elsewhere.
    ------------------------------------------------------------------------ */
 
-.admin-shell { max-width: 52rem; margin: 0 auto; }
+.admin-shell {
+  max-width: 52rem;
+  margin: 0 auto;
+  /* body no longer sets a page gutter — the public site scopes its own. */
+  padding: 2rem 1.25rem 4rem;
+}
 
 .admin-nav {
   display: flex;
@@ -85,7 +466,7 @@ form { margin-bottom: 1.5rem; }
   padding: 0.5rem 0;
   margin-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
-  background: Canvas;
+  background: var(--bg);
 }
 .toolbar-group { display: flex; gap: 0.25rem; }
 .toolbar-group + .toolbar-group {
@@ -106,7 +487,7 @@ form { margin-bottom: 1.5rem; }
 .prose-editor {
   min-height: 22rem;
   padding: 0.5rem 0 2rem;
-  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
   font-size: 1.125rem;
   line-height: 1.7;
   outline: none;
@@ -191,6 +572,6 @@ form { margin-bottom: 1.5rem; }
   margin-bottom: 0.5rem;
 }
 
-.login-page { max-width: 22rem; margin: 4rem auto; }
+.login-page { max-width: 22rem; margin: 4rem auto; padding: 0 1.25rem; }
 .login-page label { display: block; margin-bottom: 1rem; font-size: 0.9rem; }
 .login-page input { display: block; width: 100%; margin-top: 0.35rem; }

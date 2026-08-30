@@ -168,6 +168,32 @@ split "$(req GET "/api/posts/$POST_ID")"
 check "deleted post is gone" 404 "$RESP_CODE" "$RESP_BODY"
 
 echo
+echo "Public site"
+split "$(req GET /)"
+check "home feed renders" 200 "$RESP_CODE" "$RESP_BODY"
+split "$(req GET /rss.xml)"
+check "rss feed renders" 200 "$RESP_CODE" "$RESP_BODY"
+case "$RESP_BODY" in
+  '<?xml version="1.0" encoding="UTF-8"?>'*) check "rss is xml" xml xml ;;
+  *) check "rss is xml" xml "not-xml" "$RESP_BODY" ;;
+esac
+split "$(req GET /no-such-post-here)"
+check "unknown slug is a real 404" 404 "$RESP_CODE" "$RESP_BODY"
+split "$(req GET /tag/no-such-tag-here)"
+check "unknown tag is a real 404" 404 "$RESP_CODE" "$RESP_BODY"
+
+# A draft must never be readable at its slug, even by someone who guesses it.
+draft_body="$(printf '{"title":"Smoke draft %s"}' "$STAMP")"
+split "$(req POST /api/posts "$draft_body")"
+check "creates a draft to probe with" 201 "$RESP_CODE" "$RESP_BODY"
+DRAFT_ID="$(printf '%s' "$RESP_BODY" | field '.post.id')"
+DRAFT_SLUG="$(printf '%s' "$RESP_BODY" | field '.post.slug')"
+split "$(req GET "/$DRAFT_SLUG")"
+check "draft is not readable at its slug" 404 "$RESP_CODE" "$RESP_BODY"
+split "$(req DELETE "/api/posts/$DRAFT_ID")"
+check "removes the probe draft" 204 "$RESP_CODE" "$RESP_BODY"
+
+echo
 echo "Sign out"
 # -c so curl writes the cleared cookie back to the jar. The session token is
 # stateless and stays valid until it expires; signing out removes the client's

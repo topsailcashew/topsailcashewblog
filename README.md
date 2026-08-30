@@ -1,10 +1,11 @@
-# Personal blog — Phases 1–2
+# Personal blog — Phases 1–3
 
 A single-user, Medium-style publishing platform. Phase 1 laid the foundation
-(schema, migrations, post CRUD). Phase 2 adds the writing experience: a
+(schema, migrations, post CRUD). Phase 2 added the writing experience: a
 password-gated `/admin` area, a Tiptap editor with autosave, image upload to
-R2, and the publish flow. No public reading UI yet — see
-[Phase status](#phase-status).
+R2, and the publish flow. Phase 3 adds the public reading site: a paginated
+feed, post pages, tag pages, and RSS — statically generated and dropped from
+cache the moment you publish.
 
 - **Framework** — Next.js 16 (App Router), TypeScript
 - **Database** — Neon Postgres via Drizzle ORM + `@neondatabase/serverless`
@@ -25,11 +26,12 @@ npx wrangler r2 bucket create topsailcashew-blog-media-preview  # once
 npm run dev
 ```
 
-Then open <http://localhost:3000/admin> and sign in with `ADMIN_PASSWORD`.
+<http://localhost:3000> is the public site; <http://localhost:3000/admin> is
+where you write — sign in with `ADMIN_PASSWORD`.
 
-The bucket commands only matter for a deployed Worker — `npm run dev` and
-`npm run cf:preview` back the binding with a local on-disk bucket, so uploads
-work before either bucket exists.
+The bucket and KV commands only matter for a deployed Worker. `npm run dev`
+and `npm run cf:preview` back every binding with local on-disk storage, so
+uploads and the page cache work before any of them exist.
 
 ---
 
@@ -41,6 +43,9 @@ work before either bucket exists.
 | `ADMIN_PASSWORD` | yes | login | The password for the one author. Checked in constant time against what the login form sends. |
 | `SESSION_SECRET` | yes | login, proxy | HMAC key for the session cookie. `openssl rand -base64 32`. Rotating it signs you out. Without it every admin request is refused (see [Auth](#auth)). |
 | `R2_PUBLIC_BASE_URL` | no | media | Serve uploads from an r2.dev or custom domain instead of proxying them through the Worker. Applies to *new* uploads. |
+| `NEXT_PUBLIC_SITE_URL` | for RSS | public site | Absolute origin, e.g. `https://blog.example.com`. **Inlined at build time**, so it must be set wherever you run `npm run cf:deploy` — not as a Worker variable. Without it, feed links and images are relative and will not resolve in a reader. |
+| `NEXT_PUBLIC_SITE_NAME` | no | public site | Header and feed title. Defaults to "Topsail Cashew". |
+| `NEXT_PUBLIC_SITE_DESCRIPTION` | no | public site | Tagline under the title and the feed description. |
 | `TEST_DATABASE_URL` | tests only | `npm test` | A scratch database. **The suite truncates every table**, so never point this at real data. Falls back to `DATABASE_URL` if unset. |
 | `NEON_FETCH_ENDPOINT` | no | app | Redirects the Neon HTTP driver at a local SQL-over-HTTP proxy (e.g. Neon Local) so `next dev` can run against a plain Postgres. Leave unset in production. |
 
@@ -233,6 +238,11 @@ public pages will.
 npx wrangler login
 npx wrangler r2 bucket create topsailcashew-blog-media
 npx wrangler r2 bucket create topsailcashew-blog-media-preview
+
+# ISR cache for the public pages. Paste the returned ids into wrangler.jsonc.
+npx wrangler kv namespace create NEXT_INC_CACHE_KV
+npx wrangler kv namespace create NEXT_TAG_CACHE_KV
+
 npx wrangler secret put DATABASE_URL      # once per environment
 npx wrangler secret put ADMIN_PASSWORD
 npx wrangler secret put SESSION_SECRET
@@ -249,37 +259,44 @@ Deploy config lives in [`wrangler.jsonc`](wrangler.jsonc) and
 ### Verified
 
 `npm run build`, `npm run cf:build`, a local workerd run, and
-`wrangler deploy --dry-run` all pass. On the built Worker running under
-workerd, against a real Postgres and a real R2 bucket: sign-in and sign-out,
-the auth gate on every protected route, writing a post with the full mark set,
-autosave, cover and inline image upload, tag entry, publish/unpublish, and a
-reload restoring the draft byte-for-byte.
+`wrangler deploy --dry-run` all pass.
 
-**Not verified:** a deploy to a live Cloudflare account, which needs your
-credentials. The R2 bucket exercised was the local on-disk one `wrangler dev`
-provides — the same binding and the same API as production, but not your
-account's bucket.
+On the built Worker under workerd, against a real Postgres, a real R2 bucket
+and a real KV cache: sign-in and sign-out, the auth gate on every protected
+route, writing a post with the full mark set, autosave, cover and inline image
+upload, tag entry, publish/unpublish, and a reload restoring the draft
+byte-for-byte.
+
+For the public site: the feed in the right order, pagination across pages with
+no gaps or repeats, a post page rendering `content_html` with its R2 images,
+drafts 404ing at their slug, tag filtering, empty tags 404ing, well-formed RSS
+with absolute URLs — and publish → appears / retag → moves / unpublish → 404
+all confirmed against the live cache.
+
+**Not verified:** a deploy to a live Cloudflare account. The R2 bucket and KV
+namespaces exercised were the local on-disk ones `wrangler dev` provides —
+same bindings and same APIs as production, but not your account's.
 
 ### Worker size
 
-The dry run reports **2808 KiB gzipped**. Cloudflare's compressed limit is
-3 MB on the free plan and 10 MB on paid, so this fits — but with only about
-**264 KiB of headroom on free**, up from 587 KiB before Phase 2.
+The dry run reports **2876 KiB gzipped** against Cloudflare's 3 MB free-plan
+limit — roughly **196 KiB of headroom**, down from 264 KiB before Phase 3.
 
-Tiptap is the reason. The editor is loaded with `next/dynamic({ ssr: false })`
-in [`PostEditorLoader.tsx`](src/components/admin/PostEditorLoader.tsx), which
-keeps ~158 KiB of it out of the Worker bundle; without that the build is
-2966 KiB and the margin is roughly 100 KiB.
+Phase 3 cost only 68 KiB: the reading pages are server components with no
+client JavaScript, and the webfont ships as a static asset, which is uploaded
+separately and does not count toward the Worker script.
 
-Check this number again before Phase 3 ships:
+Check the number before adding anything sizeable — Phase 4's Open Graph image
+generation is the obvious risk, since a rendering library would land squarely
+in the Worker bundle:
 
 ```bash
 npx wrangler deploy --dry-run --outdir /tmp/dryrun
 ```
 
-If it crosses 3 MB, the options are the paid plan or moving more client-only
-code behind `next/dynamic`. Most of the remaining weight is the Next.js server
-runtime, which will not shrink.
+If it crosses 3 MB the options are the paid plan (10 MB) or moving more
+client-only code behind `next/dynamic`, as the editor already is. Most of the
+remainder is the Next.js server runtime, which will not shrink.
 
 ### Known wrinkle
 
@@ -300,14 +317,18 @@ createdb blog_test
 TEST_DATABASE_URL=postgresql://localhost/blog_test npm test
 ```
 
-61 tests run the real route handlers against a real Postgres — the suite
+79 tests run the real route handlers against a real Postgres — the suite
 migrates the database, then truncates between tests. There are no mocks of the
 code under test: `setDbForTesting` in [`src/db/client.ts`](src/db/client.ts)
 swaps the Neon handle for a node-postgres one, and the R2 binding is a small
 in-memory stand-in passed in as an argument.
 
 Coverage includes session signing and tampering, the protected-route matrix,
-magic-byte sniffing, and the upload size and format limits.
+magic-byte sniffing, upload size and format limits, and — for the public site
+— that drafts stay out of the feed, the slug lookup, the pre-render lists and
+the tag pages; that pagination neither drops nor repeats a post; that the feed
+sorts by `published_at`; and that RSS escapes correctly and absolutises its
+URLs.
 
 [`tests/neon-http.test.ts`](tests/neon-http.test.ts) additionally runs the same
 repository code through the **actual Neon HTTP driver** the Worker deploys
@@ -413,6 +434,95 @@ kill it.
 
 ---
 
+## The public site
+
+Four routes, all statically generated, none shipping any client JavaScript of
+their own.
+
+| Route | What it is |
+| --- | --- |
+| `/` | Newest ten published posts |
+| `/page/2`, `/page/3`, … | Older pages. `/page/1` redirects to `/` so there is one canonical URL for the first page |
+| `/[slug]` | The post |
+| `/tag/[tag]` | Posts carrying that tag |
+| `/rss.xml` | RSS 2.0 |
+
+**Only published posts are reachable.** Every public read goes through
+[`src/lib/public-posts.ts`](src/lib/public-posts.ts), which pins
+`status = 'published'` into each query — so a draft is indistinguishable from
+a slug that never existed, and both produce a real 404. A tag carried only by
+drafts 404s too, rather than rendering an empty page for a crawler to index.
+
+### Pagination, not infinite scroll
+
+Ten posts a page. Each page is a real URL, so it is cacheable, linkable, and
+crawlable, and it works with JavaScript off. Infinite scroll would trade all
+of that for client state and a fetch waterfall over content that is otherwise
+completely static.
+
+### Revalidation is on demand
+
+Pages are rendered once and served from KV. When a post is created, edited,
+published, unpublished, or deleted, the write path calls
+[`revalidatePublicPages`](src/lib/revalidate.ts) and the affected pages are
+dropped; the next visitor gets a fresh render.
+
+Time-based revalidation was the alternative. It was the wrong trade here: this
+blog changes a few times a month, so a short window would re-query Neon
+forever for pages nobody touched, and a long one would leave a typo fix
+sitting stale. The hourly `revalidate` that *is* set is only a backstop in
+case an invalidation is ever missed.
+
+Two details that are easy to get wrong:
+
+- **Draft autosave must not invalidate anything.** The editor saves every ten
+  seconds; `affectsPublicOutput()` keeps that churn away from the public cache
+  by checking whether the post is — or just stopped being — published.
+- **Invalidation uses concrete paths, never route patterns.**
+  `revalidatePath("/[slug]", "page")` looks right and does nothing against the
+  KV tag cache: entries are keyed by real pathname, so the pattern matches
+  none of them. Caught by an unpublished post that kept serving a 200. The
+  write path now passes both the old and new slug and the old and new tags, so
+  a rename or a retag leaves nothing behind at the previous URL.
+
+Cache invalidation is best-effort: the write has already committed, so a
+failure there is logged rather than turned into a 500 on a save that
+succeeded.
+
+### Typography
+
+The reading column is the point of this phase.
+
+- **Body** — Source Serif 4, loaded through `next/font`, which self-hosts it
+  from our own origin at build time. No request to Google, and only the two
+  subsets actually used (roman and italic) ship.
+- **Chrome** — the system sans stack for nav, dates, tags and pagination, so
+  UI paints instantly and reads as distinct from the prose.
+- **Measure** — 42rem, giving **66 characters a line** at 19px, inside the
+  60–75 that is comfortable to read. 36 characters on a 375px phone, which is
+  what the width allows at a legible size.
+- **Rhythm** — 1.75 line-height, 1.9rem between blocks. That spacing is in
+  `rem` on purpose: in `em` it resolves against the *child*, so the gap above
+  a code block would quietly shrink and break the rhythm.
+- **Dark mode** — included, because with custom properties it was a dozen
+  lines. Both palettes are warm rather than pure grey.
+- **Contrast** — every text token meets WCAG AA against its background. The
+  muted date line originally sat at 3.4:1; it is now 4.7:1.
+
+Images use plain `<img>`, not `next/image`. Covers are already in R2 at the
+size the author uploaded, and the optimizer would add a Worker dependency for
+no gain. Feed thumbnails get a fixed 2:1 box so rows do not jump as they load.
+
+### RSS
+
+RSS 2.0 at `/rss.xml`, with `content:encoded` carrying the full post HTML.
+Site-relative image and link URLs are rewritten to absolute — a feed reader
+resolves relative URLs against its own origin, so `/media/…` would otherwise
+point at the wrong host. That rewrite needs `NEXT_PUBLIC_SITE_URL`; the route
+logs a warning when it is unset.
+
+---
+
 ## The editor
 
 `/admin/posts/[id]`, with `new` as a special id. Tiptap 3 with a fixed
@@ -479,6 +589,13 @@ and its `media` row in place — worth a sweep when the media library grows.
 ```
 src/
   app/
+    (public)/layout.tsx             site chrome for every reading page
+    (public)/page.tsx               home feed
+    (public)/page/[page]/           older feed pages
+    (public)/[slug]/page.tsx        the post
+    (public)/tag/[tag]/page.tsx     posts by tag
+    (public)/not-found.tsx          real 404 for drafts and unknown slugs
+    rss.xml/route.ts                RSS 2.0
     admin/login/page.tsx            sign-in (outside the dashboard chrome)
     admin/(dashboard)/page.tsx      post list, filterable by status
     admin/(dashboard)/posts/[id]/   the editor; `new` is a special id
@@ -487,6 +604,9 @@ src/
     api/media/route.ts              upload + recent uploads
     media/[...key]/route.ts         serves objects back out of R2
   components/
+    public/PostList.tsx             feed layout, shared by home and tag pages
+    public/PostMeta.tsx             date, reading time, tags
+    public/Pagination.tsx           numbered pages
     editor/extensions.ts            the document schema, defined once
     editor/EditorToolbar.tsx        formatting controls
     admin/PostEditorLoader.tsx      client-only dynamic import of the editor
@@ -497,6 +617,9 @@ src/
     client.ts                       Neon HTTP handle + the test seam
     node.ts                         node-postgres handle (migrations/tests)
   lib/
+    public-posts.ts                 every public read — published-only, in one place
+    revalidate.ts                   which cached pages a write drops
+    site.ts                         site name, origin, date formatting
     posts.ts                        post repository — all post SQL
     tags.ts                         tag upsert + association sync
     slug.ts                         slugify, uniqueness, SQLSTATE detection
@@ -528,8 +651,13 @@ area and mutating API · Tiptap editor with a full toolbar · autosave with a
 visible status · image upload to R2 (inline and cover) · tag input ·
 publish/unpublish · filterable admin post list.
 
-**Not yet:** public reading UI and typography (Phase 3) · tag pages · RSS ·
-search · series grouping · reading time · OG images (Phase 4).
+**Done — Phase 3.** Paginated public feed · post pages rendering
+`content_html` · tag pages · real 404s for drafts and empty tags · typography
+pass with a self-hosted serif, dark mode and AA contrast · RSS 2.0 · ISR with
+on-demand revalidation.
+
+**Not yet:** full-text search · series grouping · Open Graph image generation
+(Phase 4).
 
 ---
 

@@ -63,10 +63,12 @@ describe(
       assert.equal(fetched?.id, created.id);
       assert.deepEqual(fetched?.content_json, { type: "doc", content: [] });
 
-      const published = await updatePost(db, created.id, {
+      const { post: published, previous } = await updatePost(db, created.id, {
         status: "published",
         tags: ["Neon"],
       });
+      assert.equal(previous.status, "draft");
+      assert.deepEqual(previous.tagSlugs.sort(), ["driver-test", "neon"]);
       assert.equal(published.status, "published");
       assert.ok(published.published_at !== null);
       assert.deepEqual(published.tags.map((tag) => tag.slug), ["neon"]);
