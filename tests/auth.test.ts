@@ -18,10 +18,29 @@ describe("route protection", () => {
       ["/api/posts/abc", "DELETE"],
       ["/api/media", "POST"],
       ["/api/media", "GET"],
+      // Comment moderation and series management are admin-only.
+      ["/api/comments", "GET"],
+      ["/api/comments", "PATCH"],
+      ["/api/comments/abc", "POST"],
+      ["/api/comments/abc", "PATCH"],
+      ["/api/series", "GET"],
+      ["/api/series", "POST"],
+      ["/api/series/abc", "DELETE"],
+      ["/admin/comments", "GET"],
+      ["/admin/series", "GET"],
     ];
     for (const [pathname, method] of gated) {
       assert.equal(isProtected(pathname, method), true, `${method} ${pathname}`);
     }
+  });
+
+  it("opens comment submission but nothing else under that path", () => {
+    // A near-miss on either the path or the method must still be gated.
+    assert.equal(isProtected("/api/comments", "POST"), false);
+    assert.equal(isProtected("/api/comments", "GET"), true);
+    assert.equal(isProtected("/api/comments", "DELETE"), true);
+    assert.equal(isProtected("/api/comments/", "POST"), true);
+    assert.equal(isProtected("/api/comments/abc", "POST"), true);
   });
 
   it("leaves reads, media files and the login flow open", () => {
@@ -34,6 +53,8 @@ describe("route protection", () => {
       ["/api/auth/logout", "POST"],
       ["/media/2026/08/x.png", "GET"],
       ["/", "GET"],
+      // The one public write: submitting a comment. It lands as pending.
+      ["/api/comments", "POST"],
     ];
     for (const [pathname, method] of open) {
       assert.equal(isProtected(pathname, method), false, `${method} ${pathname}`);
@@ -44,6 +65,8 @@ describe("route protection", () => {
     // `/api/posts-secret` must not be treated as inside /api/posts.
     assert.equal(isProtected("/api/postsfoo", "POST"), false);
     assert.equal(isProtected("/adminfoo", "GET"), false);
+    assert.equal(isProtected("/api/commentsfoo", "GET"), false);
+    assert.equal(isProtected("/api/seriesfoo", "GET"), false);
   });
 });
 

@@ -26,6 +26,7 @@ export const POST = handle(async (request: NextRequest) => {
     await revalidatePublicPages(db, {
       slugs: [post.slug],
       tagSlugs: post.tags.map((tag) => tag.slug),
+      seriesIds: [post.series_id],
     });
   }
   return json({ post }, 201);

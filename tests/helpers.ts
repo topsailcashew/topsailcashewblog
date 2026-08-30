@@ -47,9 +47,14 @@ export async function teardownDatabase(): Promise<void> {
   handle = null;
 }
 
+/**
+ * Every table, so the suite is idempotent — leaving `series` behind made it
+ * pass on a fresh database and fail on the second run, when slugs collided
+ * with rows from the previous one.
+ */
 export async function resetTables(): Promise<void> {
   await db().execute(
-    sql`truncate table post_tags, posts, tags, media restart identity cascade`,
+    sql`truncate table comments, post_tags, posts, tags, media, series restart identity cascade`,
   );
 }
 

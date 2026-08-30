@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { PostEditorLoader } from "@/components/admin/PostEditorLoader";
 import { getPostById } from "@/lib/posts";
+import { listSeries } from "@/lib/series";
 import { uuidSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -15,14 +16,17 @@ type Params = Promise<{ id: string }>;
 export default async function EditorPage({ params }: { params: Params }) {
   const { id } = await params;
 
+  const db = getDb();
+  const series = await listSeries(db).catch(() => []);
+
   if (id === "new") {
-    return <PostEditorLoader initialPost={null} />;
+    return <PostEditorLoader initialPost={null} series={series} />;
   }
 
   if (!uuidSchema.safeParse(id).success) notFound();
 
-  const post = await getPostById(getDb(), id);
+  const post = await getPostById(db, id);
   if (!post) notFound();
 
-  return <PostEditorLoader initialPost={post} />;
+  return <PostEditorLoader initialPost={post} series={series} />;
 }

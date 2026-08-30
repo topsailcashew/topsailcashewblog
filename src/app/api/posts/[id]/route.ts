@@ -38,6 +38,8 @@ export const PATCH = handle(async (request: NextRequest, context: RouteContext) 
     await revalidatePublicPages(db, {
       slugs: [post.slug, previous.slug],
       tagSlugs: [...post.tags.map((tag) => tag.slug), ...previous.tagSlugs],
+      // Both, so moving a post out of a series refreshes the page it left.
+      seriesIds: [post.series_id, previous.seriesId],
     });
   }
   return json({ post });
@@ -56,6 +58,7 @@ export const DELETE = handle(async (_request: NextRequest, context: RouteContext
     await revalidatePublicPages(db, {
       slugs: [existing.slug],
       tagSlugs: existing.tags.map((tag) => tag.slug),
+      seriesIds: [existing.series_id],
     });
   }
   return new Response(null, { status: 204 });

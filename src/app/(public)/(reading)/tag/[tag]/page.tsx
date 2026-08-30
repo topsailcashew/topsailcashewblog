@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
-import { PostList } from "@/components/public/PostList";
+import { PostGrid } from "@/components/public/PostGrid";
 import { getFeed, getTagName, listPublishedTagSlugs } from "@/lib/public-posts";
 
 export const revalidate = 3600;
@@ -45,14 +45,16 @@ export default async function TagPage({ params }: { params: Params }) {
   if (feed.posts.length === 0) notFound();
 
   return (
-    <div className="wrap">
-      <div className="feed-intro">
+    // Same 3-column grid as the homepage, no black canvas (§7).
+    <div className="shell-wrap" id="content">
+      <div className="page-head">
+        <p className="label">Tagged</p>
         <h1>{name}</h1>
         <p>
           {feed.totalPosts} {feed.totalPosts === 1 ? "post" : "posts"}
         </p>
       </div>
-      <PostList posts={feed.posts} />
+      <PostGrid posts={feed.posts} />
     </div>
   );
 }

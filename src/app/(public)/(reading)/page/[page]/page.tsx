@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getDb } from "@/db/client";
-import { PostList } from "@/components/public/PostList";
+import { PostGrid } from "@/components/public/PostGrid";
 import { Pagination } from "@/components/public/Pagination";
 import { getFeed } from "@/lib/public-posts";
 
@@ -38,8 +38,12 @@ export default async function FeedPage({ params }: { params: Params }) {
   if (feed.posts.length === 0) notFound();
 
   return (
-    <div className="wrap">
-      <PostList posts={feed.posts} />
+    <div className="shell-wrap" id="content">
+      <div className="page-head">
+        <p className="label">Archive</p>
+        <h1>Page {feed.page}</h1>
+      </div>
+      <PostGrid posts={feed.posts} />
       <Pagination page={feed.page} totalPages={feed.totalPages} />
     </div>
   );

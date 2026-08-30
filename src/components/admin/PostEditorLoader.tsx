@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { SerializedPost } from "@/lib/posts";
+import type { SerializedSeries } from "@/lib/series";
 
 /**
  * Loads the editor on the client only.
@@ -21,8 +22,10 @@ const PostEditor = dynamic(
 
 export function PostEditorLoader({
   initialPost,
+  series,
 }: {
   initialPost: SerializedPost | null;
+  series: SerializedSeries[];
 }) {
-  return <PostEditor initialPost={initialPost} />;
+  return <PostEditor initialPost={initialPost} series={series} />;
 }

@@ -1,42 +1,17 @@
-import Link from "next/link";
-import { siteConfig } from "@/lib/site";
-
 /**
- * Chrome for every reading page. Server-rendered with no client JavaScript —
- * the public site ships none at all.
+ * Shared by every public route. Deliberately thin: the black-canvas framing is
+ * a homepage signature (Design.md §3), so the chrome lives one level down —
+ * in `(reading)/layout.tsx` for reading pages, and in the homepage itself.
  */
 export default function PublicLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <div className="site">
+    <>
       <a className="skip-link" href="#content">
         Skip to content
       </a>
-
-      <header className="site-header">
-        <div className="wrap">
-          <Link href="/" className="site-title">
-            {siteConfig.name}
-          </Link>
-          <nav className="site-nav" aria-label="Primary">
-            <a href="/rss.xml">RSS</a>
-          </nav>
-        </div>
-      </header>
-
-      <main className="site-main" id="content">
-        {children}
-      </main>
-
-      <footer className="site-footer">
-        <div className="wrap">
-          <span>
-            © {new Date().getFullYear()} {siteConfig.name}
-          </span>
-          <a href="/rss.xml">Subscribe by RSS</a>
-        </div>
-      </footer>
-    </div>
+      {children}
+    </>
   );
 }

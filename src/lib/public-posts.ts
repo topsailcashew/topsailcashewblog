@@ -1,6 +1,6 @@
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
-import { postTags, posts, tags } from "@/db/schema";
+import { postTags, posts, series, tags } from "@/db/schema";
 import { serializePost, type SerializedPost } from "./posts";
 import { getTagsForPosts } from "./tags";
 
@@ -12,8 +12,8 @@ import { getTagsForPosts } from "./tags";
  * a draft, whatever the caller asks for.
  */
 
-/** Posts per page on the home feed. */
-export const POSTS_PER_PAGE = 10;
+/** Posts per page. 12 fills the 3-column grid evenly (Design.md §5). */
+export const POSTS_PER_PAGE = 12;
 
 const publishedOnly = eq(posts.status, "published");
 
@@ -114,6 +114,79 @@ export async function getPublishedPost(
 
   const tagsByPost = await getTagsForPosts(db, [row.id]);
   return serializePost(row, tagsByPost.get(row.id) ?? []);
+}
+
+/** How many results a search page shows before it stops. */
+export const SEARCH_LIMIT = 25;
+
+export type SearchResult = PostSummary & { rank: number };
+
+/**
+ * Full-text search over title, excerpt and body.
+ *
+ * `websearch_to_tsquery` is used rather than `plainto_tsquery` so a reader can
+ * type quoted phrases and `-exclusions` the way they would in a search engine,
+ * and so a stray operator character cannot raise a syntax error.
+ */
+export async function searchPublished(
+  db: BlogDatabase,
+  query: string,
+): Promise<SearchResult[]> {
+  const trimmed = query.trim();
+  if (trimmed === "") return [];
+
+  const tsquery = sql`websearch_to_tsquery('english', ${trimmed})`;
+  const rank = sql<number>`ts_rank(${posts.searchVector}, ${tsquery})`;
+
+  const rows = await db
+    .select({ post: posts, rank })
+    .from(posts)
+    .where(and(publishedOnly, sql`${posts.searchVector} @@ ${tsquery}`))
+    .orderBy(desc(rank), desc(posts.publishedAt))
+    .limit(SEARCH_LIMIT);
+
+  const tagsByPost = await getTagsForPosts(
+    db,
+    rows.map((row) => row.post.id),
+  );
+
+  return rows.map((row) => ({
+    ...toSummary(serializePost(row.post, tagsByPost.get(row.post.id) ?? [])),
+    rank: Number(row.rank),
+  }));
+}
+
+/** Published posts in a series, earliest first — the order they were meant to be read. */
+export async function getSeriesPosts(
+  db: BlogDatabase,
+  seriesSlug: string,
+): Promise<PostSummary[]> {
+  const rows = await db
+    .select({ post: posts })
+    .from(posts)
+    .innerJoin(series, eq(series.id, posts.seriesId))
+    .where(and(publishedOnly, eq(series.slug, seriesSlug)))
+    .orderBy(asc(posts.publishedAt), asc(posts.id));
+
+  const tagsByPost = await getTagsForPosts(
+    db,
+    rows.map((row) => row.post.id),
+  );
+  return rows.map((row) =>
+    toSummary(serializePost(row.post, tagsByPost.get(row.post.id) ?? [])),
+  );
+}
+
+/** Series slugs with at least one published post — for pre-rendering. */
+export async function listPublishedSeriesSlugs(
+  db: BlogDatabase,
+): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ slug: series.slug })
+    .from(series)
+    .innerJoin(posts, eq(posts.seriesId, series.id))
+    .where(publishedOnly);
+  return rows.map((row) => row.slug);
 }
 
 /** Full published posts, newest first — the RSS feed's source. */

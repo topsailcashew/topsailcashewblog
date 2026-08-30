@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import { EMPTY_DOC, buildExtensions } from "@/components/editor/extensions";
 import type { SerializedPost } from "@/lib/posts";
+import type { SerializedSeries } from "@/lib/series";
 import { useAutosave } from "@/lib/use-autosave";
 import { isImageFile, uploadImage } from "@/lib/upload-client";
 import { CoverImagePicker } from "./CoverImagePicker";
@@ -19,6 +20,7 @@ type Draft = {
   excerpt: string;
   coverImageUrl: string | null;
   tags: string[];
+  seriesId: string | null;
   contentJson: JSONContent;
 };
 
@@ -29,11 +31,18 @@ function draftFromPost(post: SerializedPost | null): Draft {
     excerpt: post?.excerpt ?? "",
     coverImageUrl: post?.cover_image_url ?? null,
     tags: post?.tags.map((tag) => tag.name) ?? [],
+    seriesId: post?.series_id ?? null,
     contentJson: (post?.content_json as JSONContent | null) ?? EMPTY_DOC,
   };
 }
 
-export function PostEditor({ initialPost }: { initialPost: SerializedPost | null }) {
+export function PostEditor({
+  initialPost,
+  series = [],
+}: {
+  initialPost: SerializedPost | null;
+  series?: SerializedSeries[];
+}) {
   const router = useRouter();
 
   const [postId, setPostId] = useState<string | null>(initialPost?.id ?? null);
@@ -125,6 +134,7 @@ export function PostEditor({ initialPost }: { initialPost: SerializedPost | null
         excerpt: value.excerpt.trim() === "" ? null : value.excerpt.trim(),
         cover_image_url: value.coverImageUrl,
         tags: value.tags,
+        series_id: value.seriesId,
       };
 
       const id = postIdRef.current;
@@ -313,6 +323,24 @@ export function PostEditor({ initialPost }: { initialPost: SerializedPost | null
           <span className="field-label">Tags</span>
           <TagInput tags={draft.tags} onChange={(tags) => update("tags", tags)} />
         </div>
+
+        <label>
+          Series
+          <select
+            value={draft.seriesId ?? ""}
+            onChange={(event) =>
+              update("seriesId", event.target.value === "" ? null : event.target.value)
+            }
+            onBlur={() => void flush()}
+          >
+            <option value="">Not part of a series</option>
+            {series.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.title}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <div className="field">
           <span className="field-label">Cover image</span>

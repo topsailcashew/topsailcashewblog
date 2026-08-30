@@ -20,14 +20,19 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 /**
  * Routes that stay reachable without a session:
  *   - the login page and the endpoints that grant/clear a session
- *   - GET /api/posts — reads stay open so the Phase 3 public site can use them
+ *   - GET /api/posts — reads stay open so the public site can use them
  *   - /media/* — uploaded images must load in a browser without a cookie
+ *   - POST /api/comments *exactly* — the one public write in the app. Readers
+ *     submit without an account; every submission lands as `pending` and is
+ *     invisible until approved. Nothing else under /api/comments is open:
+ *     listing and moderation both require a session.
  */
 function isPublic(pathname: string, method: string): boolean {
   if (pathname === "/admin/login") return true;
   if (pathname === "/api/auth/login" || pathname === "/api/auth/logout") return true;
   if (pathname === "/media" || pathname.startsWith("/media/")) return true;
   if (isPostsApi(pathname) && SAFE_METHODS.has(method)) return true;
+  if (pathname === "/api/comments" && method === "POST") return true;
   return false;
 }
 
@@ -43,6 +48,14 @@ function isMediaApi(pathname: string): boolean {
   return pathname === "/api/media" || pathname.startsWith("/api/media/");
 }
 
+function isCommentsApi(pathname: string): boolean {
+  return pathname === "/api/comments" || pathname.startsWith("/api/comments/");
+}
+
+function isSeriesApi(pathname: string): boolean {
+  return pathname === "/api/series" || pathname.startsWith("/api/series/");
+}
+
 /**
  * Whether this request needs a session.
  *
@@ -51,7 +64,13 @@ function isMediaApi(pathname: string): boolean {
  */
 export function isProtected(pathname: string, method: string): boolean {
   if (isPublic(pathname, method)) return false;
-  return isAdminRoute(pathname) || isPostsApi(pathname) || isMediaApi(pathname);
+  return (
+    isAdminRoute(pathname) ||
+    isPostsApi(pathname) ||
+    isMediaApi(pathname) ||
+    isCommentsApi(pathname) ||
+    isSeriesApi(pathname)
+  );
 }
 
 export function getSessionSecret(): string | undefined {

@@ -46,3 +46,6 @@ next-env.d.ts
 .wrangler/
 .dev.vars
 tsconfig.tsbuildinfo
+
+# Generated Open Graph cards (rebuilt by `npm run og:generate`)
+public/og/

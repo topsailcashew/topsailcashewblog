@@ -136,6 +136,26 @@ export async function verifySessionToken(
   return { subject: payload.sub, expiresAt: payload.exp * 1000 };
 }
 
+/**
+ * Stable, non-reversible fingerprint of a client address.
+ *
+ * Rate limiting needs to recognise a repeat submitter; it does not need to
+ * know who they are. HMAC-ing with the session secret means the stored value
+ * is useless to anyone who reads the table, and rotating the secret discards
+ * the history rather than leaving raw addresses behind.
+ */
+export async function hashClientAddress(
+  address: string,
+  secret: string,
+): Promise<string> {
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    await hmacKey(secret),
+    encoder.encode(`comment-ip:${address}`),
+  );
+  return base64UrlEncode(new Uint8Array(signature));
+}
+
 /** Cookie attributes shared by the login and logout responses. */
 export function sessionCookieOptions(request: Request, maxAge: number) {
   return {

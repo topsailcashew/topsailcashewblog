@@ -18,6 +18,7 @@ export type SerializedPost = {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  series_id: string | null;
   tags: TagSummary[];
 };
 
@@ -69,6 +70,7 @@ export async function createPost(
         excerpt: input.excerpt ?? null,
         coverImageUrl: emptyToNull(input.cover_image_url),
         status,
+        seriesId: input.series_id ?? null,
         publishedAt: status === "published" ? new Date() : null,
       })
       .returning();
@@ -84,6 +86,7 @@ export type PreviousPostState = {
   slug: string;
   status: PostStatus;
   tagSlugs: string[];
+  seriesId: string | null;
 };
 
 export type UpdatePostResult = {
@@ -106,6 +109,7 @@ export async function updatePost(
     slug: existing.slug,
     status: existing.status,
     tagSlugs: previousTags.map((tag) => tag.slug),
+    seriesId: existing.seriesId,
   };
 
   const patch: Partial<typeof posts.$inferInsert> = {};
@@ -116,6 +120,7 @@ export async function updatePost(
   if (input.cover_image_url !== undefined) {
     patch.coverImageUrl = emptyToNull(input.cover_image_url);
   }
+  if (input.series_id !== undefined) patch.seriesId = input.series_id;
 
   if (input.status !== undefined && input.status !== existing.status) {
     patch.status = input.status;
@@ -193,6 +198,7 @@ export function serializePost(row: PostRow, tags: TagSummary[]): SerializedPost 
     published_at: toIso(row.publishedAt),
     created_at: toIso(row.createdAt) ?? "",
     updated_at: toIso(row.updatedAt) ?? "",
+    series_id: row.seriesId,
     tags,
   };
 }

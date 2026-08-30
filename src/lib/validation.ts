@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { POST_STATUSES } from "@/db/schema";
+import { COMMENT_STATUSES, POST_STATUSES } from "@/db/schema";
 import { isValidSlug } from "./slug";
 
 /**
@@ -55,6 +55,7 @@ export const createPostSchema = z.object({
   cover_image_url: nullableUrl,
   status: z.enum(POST_STATUSES).optional(),
   tags: tagsSchema,
+  series_id: z.uuid().nullable().optional(),
 });
 
 export const updatePostSchema = z
@@ -67,6 +68,7 @@ export const updatePostSchema = z
     cover_image_url: nullableUrl,
     status: z.enum(POST_STATUSES).optional(),
     tags: tagsSchema,
+    series_id: z.uuid().nullable().optional(),
   })
   .refine(
     (body) => Object.keys(body).length > 0,
@@ -80,6 +82,56 @@ export const listPostsQuerySchema = z.object({
 });
 
 export const uuidSchema = z.uuid("Expected a post id (uuid)");
+
+/* --- series ------------------------------------------------------------- */
+
+export const createSeriesSchema = z.object({
+  title: z.string().trim().min(1, "Title is required").max(200),
+  description: z.string().trim().max(1000).nullable().optional(),
+  slug: slugSchema.optional(),
+});
+
+export const updateSeriesSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    description: z.string().trim().max(1000).nullable().optional(),
+    slug: slugSchema.optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, "Provide a field to update");
+
+/* --- comments ----------------------------------------------------------- */
+
+/**
+ * The honeypot is a field a human never sees and never fills. Anything in it
+ * marks the submission as automated.
+ */
+export const HONEYPOT_FIELD = "website";
+
+export const submitCommentSchema = z.object({
+  post_id: z.uuid("Unknown post"),
+  parent_id: z.uuid().nullable().optional(),
+  author_name: z.string().trim().min(1, "Please add your name").max(120),
+  author_email: z.email("That does not look like an email address").max(320),
+  body: z
+    .string()
+    .trim()
+    .min(2, "Please write a little more")
+    .max(4000, "Comments are capped at 4000 characters"),
+  /*
+    Accepted as any string on purpose. Rejecting a filled honeypot here would
+    return a 422 naming the field, telling an automated client exactly what
+    caught it; the route accepts the submission normally and discards it.
+  */
+  [HONEYPOT_FIELD]: z.string().max(200).optional(),
+});
+
+export const moderateCommentSchema = z.object({
+  status: z.enum(COMMENT_STATUSES),
+});
+
+export const authorReplySchema = z.object({
+  body: z.string().trim().min(1, "Write a reply").max(4000),
+});
 
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 export type UpdatePostInput = z.infer<typeof updatePostSchema>;

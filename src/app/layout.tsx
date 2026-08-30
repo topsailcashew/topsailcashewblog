@@ -1,16 +1,32 @@
 import type { Metadata } from "next";
-import { Source_Serif_4 } from "next/font/google";
+import { Anton, Inter, Source_Serif_4 } from "next/font/google";
 import { siteConfig } from "@/lib/site";
 import "./globals.css";
 
 /**
- * One webfont, for body text only.
+ * Three families, each with one job (Design.md §4).
  *
- * Source Serif 4 was drawn for reading on screens, and `next/font` self-hosts
- * it from our own origin at build time — no request to Google, no layout
- * shift beyond the `swap`. UI chrome stays on the system sans stack so nav and
- * dates paint immediately and contrast with the serif body.
+ * Anton rather than the suggested Archivo Black: §4 asks for "a true
+ * condensed-black cut, don't fake condensation via letter-spacing alone", and
+ * Archivo Black is a black weight at normal width. Anton is genuinely
+ * condensed and was drawn for exactly this masthead use.
  */
+const display = Anton({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-display",
+  weight: "400", // Anton ships a single weight, which renders as black.
+});
+
+/** Nav, metadata, pills — quiet utility text. */
+const ui = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-ui",
+  weight: ["400", "500", "600"],
+});
+
+/** Body copy, carried over from Phase 3 (Design.md §4, §9). */
 const serif = Source_Serif_4({
   subsets: ["latin"],
   display: "swap",
@@ -29,7 +45,10 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang={siteConfig.language} className={serif.variable}>
+    <html
+      lang={siteConfig.language}
+      className={`${display.variable} ${ui.variable} ${serif.variable}`}
+    >
       <body>{children}</body>
     </html>
   );

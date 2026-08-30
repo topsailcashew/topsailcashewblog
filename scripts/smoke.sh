@@ -194,6 +194,58 @@ split "$(req DELETE "/api/posts/$DRAFT_ID")"
 check "removes the probe draft" 204 "$RESP_CODE" "$RESP_BODY"
 
 echo
+echo "Series and search"
+split "$(req GET /search)"
+check "search page renders" 200 "$RESP_CODE" "$RESP_BODY"
+split "$(req GET '/search?q=zzzznotfoundzzz')"
+check "a no-result search is still 200" 200 "$RESP_CODE" "$RESP_BODY"
+split "$(req GET /series/no-such-series)"
+check "unknown series is a real 404" 404 "$RESP_CODE" "$RESP_BODY"
+
+echo
+echo "Comments"
+# Publish a post to comment on, so the probe never touches real content.
+body="$(printf '{"title":"Smoke comment host %s","status":"published","content_html":"<p>Host.</p>"}' "$STAMP")"
+split "$(req POST /api/posts "$body")"
+check "publishes a host post" 201 "$RESP_CODE" "$RESP_BODY"
+HOST_ID="$(printf '%s' "$RESP_BODY" | field '.post.id')"
+HOST_SLUG="$(printf '%s' "$RESP_BODY" | field '.post.slug')"
+
+# Submission is the one public write: no session should be needed.
+comment="$(printf '{"post_id":"%s","author_name":"Smoke Reader","author_email":"smoke@example.com","body":"A comment from the smoke script."}' "$HOST_ID")"
+split "$(curl -sS -X POST "$BASE/api/comments" -H 'content-type: application/json' --data-binary "$comment" -w '\n%{http_code}')"
+check "anyone may submit a comment" 202 "$RESP_CODE" "$RESP_BODY"
+
+split "$(req GET "/$HOST_SLUG")"
+case "$RESP_BODY" in
+  *"A comment from the smoke script"*) check "pending comment stays private" hidden "shown" "$RESP_BODY" ;;
+  *) check "pending comment stays private" hidden hidden ;;
+esac
+
+honey="$(printf '{"post_id":"%s","author_name":"Bot","author_email":"bot@example.com","body":"Spam body.","website":"http://spam.example"}' "$HOST_ID")"
+split "$(curl -sS -X POST "$BASE/api/comments" -H 'content-type: application/json' --data-binary "$honey" -w '\n%{http_code}')"
+check "honeypot answers like a real submission" 202 "$RESP_CODE" "$RESP_BODY"
+
+split "$(curl -sS "$BASE/api/comments" -w '\n%{http_code}')"
+check "moderation queue needs a session" 401 "$RESP_CODE" "$RESP_BODY"
+
+split "$(req GET '/api/comments?status=pending')"
+check "queue readable with a session" 200 "$RESP_CODE" "$RESP_BODY"
+COMMENT_ID="$(printf '%s' "$RESP_BODY" | jq -r --arg p "$HOST_ID" '[.comments[] | select(.post.id == $p)][0].id')"
+
+split "$(req PATCH "/api/comments/$COMMENT_ID" '{"status":"approved"}')"
+check "approves the comment" 200 "$RESP_CODE" "$RESP_BODY"
+sleep 2
+split "$(req GET "/$HOST_SLUG")"
+case "$RESP_BODY" in
+  *"A comment from the smoke script"*) check "approved comment is now public" shown shown ;;
+  *) check "approved comment is now public" shown "hidden" ;;
+esac
+
+split "$(req DELETE "/api/posts/$HOST_ID")"
+check "removes the host post" 204 "$RESP_CODE" "$RESP_BODY"
+
+echo
 echo "Sign out"
 # -c so curl writes the cleared cookie back to the jar. The session token is
 # stateless and stays valid until it expires; signing out removes the client's

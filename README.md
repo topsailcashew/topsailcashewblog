@@ -1,11 +1,14 @@
-# Personal blog — Phases 1–3
+# Personal blog — Phases 1–4
 
-A single-user, Medium-style publishing platform. Phase 1 laid the foundation
-(schema, migrations, post CRUD). Phase 2 added the writing experience: a
-password-gated `/admin` area, a Tiptap editor with autosave, image upload to
-R2, and the publish flow. Phase 3 adds the public reading site: a paginated
-feed, post pages, tag pages, and RSS — statically generated and dropped from
-cache the moment you publish.
+A single-user, Medium-style publishing platform.
+
+- **Phase 1** — Neon schema, migrations, post CRUD.
+- **Phase 2** — password-gated `/admin`, Tiptap editor with autosave, R2 image
+  upload, publish flow.
+- **Phase 3** — the public reading site: paginated feed, post pages, tag pages
+  and RSS, statically generated and dropped from cache the moment you publish.
+- **Phase 4** — series grouping, Postgres full-text search, Open Graph cards,
+  and reader comments with a moderation queue.
 
 - **Framework** — Next.js 16 (App Router), TypeScript
 - **Database** — Neon Postgres via Drizzle ORM + `@neondatabase/serverless`
@@ -46,6 +49,8 @@ uploads and the page cache work before any of them exist.
 | `NEXT_PUBLIC_SITE_URL` | for RSS | public site | Absolute origin, e.g. `https://blog.example.com`. **Inlined at build time**, so it must be set wherever you run `npm run cf:deploy` — not as a Worker variable. Without it, feed links and images are relative and will not resolve in a reader. |
 | `NEXT_PUBLIC_SITE_NAME` | no | public site | Header and feed title. Defaults to "Topsail Cashew". |
 | `NEXT_PUBLIC_SITE_DESCRIPTION` | no | public site | Tagline under the title and the feed description. |
+| `COMMENT_RATE_LIMIT` | no | comments | Submissions allowed from one address per hour. Defaults to **5**. |
+| `ADMIN_EMAIL` | no | comments | Recorded against replies you write from the moderation queue. Cosmetic; never shown publicly. |
 | `TEST_DATABASE_URL` | tests only | `npm test` | A scratch database. **The suite truncates every table**, so never point this at real data. Falls back to `DATABASE_URL` if unset. |
 | `NEON_FETCH_ENDPOINT` | no | app | Redirects the Neon HTTP driver at a local SQL-over-HTTP proxy (e.g. Neon Local) so `next dev` can run against a plain Postgres. Leave unset in production. |
 
@@ -256,6 +261,21 @@ Node and will happily accept things the Workers runtime rejects.
 Deploy config lives in [`wrangler.jsonc`](wrangler.jsonc) and
 [`open-next.config.ts`](open-next.config.ts). `nodejs_compat` is required.
 
+### Migrations run before the deploy, not after
+
+`npm run cf:deploy` builds against `DATABASE_URL`, and the build reads posts —
+`generateStaticParams`, the RSS route, and the Open Graph script all query the
+database. If the schema is behind the code, the build fails with a Postgres
+`42703` (undefined column) rather than deploying something broken, which is the
+right failure but an opaque one if you are not expecting it.
+
+So the order is always:
+
+```bash
+npm run db:migrate     # bring Neon up to date first
+npm run cf:deploy
+```
+
 ### Verified
 
 `npm run build`, `npm run cf:build`, a local workerd run, and
@@ -279,24 +299,26 @@ same bindings and same APIs as production, but not your account's.
 
 ### Worker size
 
-The dry run reports **2876 KiB gzipped** against Cloudflare's 3 MB free-plan
-limit — roughly **196 KiB of headroom**, down from 264 KiB before Phase 3.
+The dry run reports **2937 KiB gzipped** against Cloudflare's 3 MB free-plan
+limit — about **135 KiB of headroom**. The design pass cost 9 KiB: the two new
+webfonts ship as static assets, which are uploaded separately and do not count
+toward the Worker script.
 
-Phase 3 cost only 68 KiB: the reading pages are server components with no
-client JavaScript, and the webfont ships as a static asset, which is uploaded
-separately and does not count toward the Worker script.
+Phase 4 nearly broke this. Generating Open Graph images inside the Worker
+measured 3289 KiB, 217 KiB *over* the limit, so that work moved to a build step
+(see [Open Graph images](#open-graph-images)). The comment form is also loaded
+with `next/dynamic` so it stays out of the server bundle — the same trick the
+editor uses — which recovered a further 111 KiB.
 
-Check the number before adding anything sizeable — Phase 4's Open Graph image
-generation is the obvious risk, since a rendering library would land squarely
-in the Worker bundle:
+Check the number before adding anything sizeable:
 
 ```bash
 npx wrangler deploy --dry-run --outdir /tmp/dryrun
 ```
 
-If it crosses 3 MB the options are the paid plan (10 MB) or moving more
-client-only code behind `next/dynamic`, as the editor already is. Most of the
-remainder is the Next.js server runtime, which will not shrink.
+If it crosses 3 MB the options are the paid plan (10 MiB) or moving more
+client-only code behind `next/dynamic`. Most of the remainder is the Next.js
+server runtime, which will not shrink.
 
 ### Known wrinkle
 
@@ -317,7 +339,7 @@ createdb blog_test
 TEST_DATABASE_URL=postgresql://localhost/blog_test npm test
 ```
 
-79 tests run the real route handlers against a real Postgres — the suite
+107 tests run the real route handlers against a real Postgres — the suite
 migrates the database, then truncates between tests. There are no mocks of the
 code under test: `setDbForTesting` in [`src/db/client.ts`](src/db/client.ts)
 swaps the Neon handle for a node-postgres one, and the R2 binding is a small
@@ -329,6 +351,17 @@ magic-byte sniffing, upload size and format limits, and — for the public site
 the tag pages; that pagination neither drops nor repeats a post; that the feed
 sorts by `published_at`; and that RSS escapes correctly and absolutises its
 URLs.
+
+Phase 4 adds coverage for the parts most worth getting wrong: that a comment
+lands as pending and cannot be seen until approved, that rejected and spam
+comments stay out of the public thread but remain in the queue, that an email
+address is absent from the public shape entirely, that a filled honeypot writes
+nothing while answering like a real submission, that the rate limit stops one
+address without touching another, that only a hash of the address is stored,
+that a reply aimed at a reply is flattened to one level, that series parts are
+numbered by publication date and unaffected by a draft in the middle, that
+deleting a series frees its posts rather than removing them, and that search
+ranks a title match above a body match and never returns a draft.
 
 [`tests/neon-http.test.ts`](tests/neon-http.test.ts) additionally runs the same
 repository code through the **actual Neon HTTP driver** the Worker deploys
@@ -354,10 +387,14 @@ Four tables — see [`drizzle/0000_init.sql`](drizzle/0000_init.sql).
 
 ```
 posts       id, title, slug, content_json, content_html, excerpt,
-            cover_image_url, status, published_at, created_at, updated_at
+            cover_image_url, status, published_at, created_at, updated_at,
+            series_id, search_vector
 tags        id, name, slug
 post_tags   post_id, tag_id                        (composite pk)
 media       id, r2_key, url, alt_text, created_at
+series      id, title, slug, description, created_at
+comments    id, post_id, parent_id, author_name, author_email, body,
+            status, created_at, is_author, author_ip_hash
 ```
 
 ### Choices made on top of the spec
@@ -382,7 +419,23 @@ name or type, but they are decisions rather than transcription:
 intentionally not joined to `posts`: inline images live inside `content_json`,
 and `cover_image_url` is a plain URL.
 
-As specified, there is **no `series` table and no `posts.series_id`**.
+### Two columns on `comments` that the spec did not list
+
+Both exist to serve features the spec *did* ask for, and both are flagged here
+rather than slipped in:
+
+- **`is_author boolean not null default false`** — the spec asks for replies
+  written from the admin queue to be "visually marked as the author". Nothing
+  else in the row distinguishes them, so there has to be a flag.
+- **`author_ip_hash text`** — the spec asks for a rate limit "by IP". Counting
+  submissions needs something stable to count against. This is an HMAC of the
+  address, never the address itself, so no raw IP is stored anywhere.
+
+`author_email` is kept `not null` as specified. Replies you write from the
+queue store `ADMIN_EMAIL`, or an empty string when it is unset.
+
+`posts.search_vector` is a generated column rather than a plain one — Postgres
+maintains it, so it cannot fall out of step with the row.
 
 ---
 
@@ -523,6 +576,231 @@ logs a warning when it is unset.
 
 ---
 
+## Design system
+
+The public site follows [`Design.md`](Design.md) — editorial black and white,
+one hot accent, condensed display type doing the heavy lifting.
+
+### Tokens
+
+Everything lives in `:root` in [`globals.css`](src/app/globals.css). No
+component hardcodes a colour, so the palette moves from one place.
+
+| Token | Value | Used for |
+| --- | --- | --- |
+| `--bg` | `#FFFFFF` | Page background |
+| `--fg` | `#0A0A0A` | Text, hero type, borders, black canvas |
+| `--fg-muted` | `#6B6B6B` | Dates, reading time, secondary text |
+| `--border` | `#E5E5E5` | Hairline dividers |
+| `--accent` | `#FF5A1F` | Active pill fill, hover, focus rings |
+| `--accent-ink` | `#C93F08` | Links inside body copy |
+
+**Why two oranges.** §2 asks to confirm the exact hex at implementation time.
+`#FF5A1F` is 3.12:1 on white — fine for the 3:1 bar that non-text UI has to
+clear, but short of the 4.5:1 that body text needs. So the hot orange stays the
+brand accent for fills, hover and focus, and links inside prose use a darker
+cut of the same hue at 5.0:1. Same colour family, no second hue introduced.
+
+For the same reason the active pill sets **black** on orange (6.35:1), not
+white (3.12:1).
+
+### Type
+
+| Role | Family | Why |
+| --- | --- | --- |
+| Hero and titles | **Anton** | §4 asks for "a true condensed-black cut, don't fake condensation via `letter-spacing` alone". Archivo Black — the prompt's fallback suggestion — is a black weight at *normal* width, so it would have meant faking it. Anton is genuinely condensed. |
+| Nav, metadata, pills | **Inter** | Quiet, utilitarian, and it paints without drama at small sizes. |
+| Body copy | **Source Serif 4** | Carried over from Phase 3 unchanged (§4, §9). |
+
+All three are self-hosted through `next/font` — no request leaves the origin,
+and they ship as static assets rather than Worker script.
+
+The hero is sized with container-query units rather than a guessed `clamp`:
+the wordmark measures 5.6em wide in Anton at this tracking, so `17.7cqw` fills
+the column on a single line at every width from 375px up.
+
+### Duotone covers
+
+`filter: grayscale(1) contrast(1.12)`, applied through a single `.duotone`
+class so every cover on every route gets it.
+
+§2 specifies the two tones as `--fg` (near-black) and `--bg` (white) — and a
+two-tone map between black and white *is* grayscale with a contrast curve.
+There is no third colour for a true duotone to mix toward, so the more
+elaborate SVG-filter approach would produce the same pixels. If the palette
+ever gains a tinted shadow, that is the point to revisit it.
+
+### Framing
+
+The black canvas is homepage-only (§3). Reading pages sit in a
+`(reading)` route group with their own layout on plain white, so the framing
+cannot leak onto long-form text.
+
+### Decisions worth knowing
+
+- **Category filtering is client-side over the current page.** No new API
+  route, per the goal. That means it filters the twelve posts on screen, not
+  the whole archive — so the empty state links to `/tag/[slug]`, which is the
+  complete list.
+- **Twelve posts a page**, up from ten, so the 3-column grid fills evenly
+  rather than leaving a ragged final row.
+- **The card shows the date twice** — once in the top row, once in the
+  metadata row. That is §5 as written: the bottom row is the reference's credit
+  line with the byline dropped (§9). It reads as redundant; say the word and
+  the top-row date goes.
+- **A post with no cover** degrades to a text-only card. §9 treats covers as
+  required, so this is the degenerate case; the metadata row stays aligned with
+  its neighbours, which leaves visible space where the image would be.
+- **No dark mode**, per the goal and because §2 specifies a single light
+  palette. The previous dark palette is gone, and since the admin shares these
+  tokens it is now light-only too. If you want it back, it belongs scoped to
+  the admin rather than reintroduced site-wide.
+- **The admin was not restyled**, but it inherits the tokens, so it now renders
+  in the neutral black/white/grey rather than the old warm palette. No admin
+  markup or layout was touched.
+
+---
+
+## Comments
+
+The only public write surface in the app, and the only place a stranger's input
+reaches the database.
+
+### How moderation works
+
+1. A reader fills in the form at the bottom of a post — name, email, comment.
+   No account, no login.
+2. The comment is stored as **`pending`**. It is not on the page, not in the
+   RSS feed, and not visible to anyone but you.
+3. It appears in **`/admin/comments`**, which opens on the pending queue.
+4. You **approve**, **reject**, or mark it **spam**. Approving drops the cached
+   post page so the comment appears on the next request.
+5. Rejected and spam comments are kept, not deleted, and stay filterable in the
+   admin view.
+
+Replies from the queue are published immediately and badged **Author** on the
+page. They record `ADMIN_EMAIL` if it is set.
+
+### What a reader can and cannot do
+
+Submit, and nothing else. There are no commenter accounts, so there is no way
+to authenticate someone as the author of an earlier comment — editing and
+deleting are therefore not offered rather than offered insecurely.
+
+Threads are **one level deep**. A reply aimed at a reply is re-parented to the
+top-level comment, so a thread cannot grow arbitrarily deep.
+
+If a parent comment is later hidden, its approved replies are promoted to top
+level rather than vanishing — they were approved on their own merit, and
+hiding them would silently delete moderated-in content.
+
+### Spam handling
+
+Two measures, which is the bar this phase set:
+
+- **A honeypot field.** A `website` input, in the DOM but positioned off-screen
+  and `aria-hidden`, that a person never sees and never fills. When it comes
+  back filled the response is a normal `202` and nothing is written — a bot
+  learns nothing from being caught. (It is off-screen rather than
+  `display: none` because some automated clients skip fields that are not
+  rendered at all.)
+- **A per-address rate limit.** `COMMENT_RATE_LIMIT` submissions an hour,
+  default 5, counted in Postgres so it is strongly consistent rather than
+  eventually consistent.
+
+No captcha. A paid anti-abuse service would be a dependency, a cost and a
+third party seeing your readers' addresses, and none of that is justified
+before there is actual spam to look at. If it becomes necessary, Cloudflare
+Turnstile is free and sits at the edge — that is the thing to reach for, not a
+comment-service SaaS.
+
+**Not built, on purpose:** email notification of new comments. It needs an
+email provider and a subscription model to be useful, and neither belongs in a
+phase about reading. It is the obvious next addition.
+
+### Addresses are hashed, not stored
+
+Rate limiting has to recognise a repeat submitter; it does not need to know who
+they are. The submitter's IP is HMAC-ed with `SESSION_SECRET` and only the
+digest is stored, so the table is useless to anyone who reads it and rotating
+the secret discards the history. Email addresses *are* stored in full — that is
+the point of collecting them — and are never rendered on a public page. The
+public comment shape has no email field at all, so it cannot leak by oversight.
+
+---
+
+## Series
+
+A `series` table, and a nullable `series_id` on `posts`. A post belongs to at
+most one.
+
+Manage them at **`/admin/series`** — create, rename, delete — and assign one
+from the Series dropdown in the post editor. Deleting a series does **not**
+delete its posts; their `series_id` is nulled and they carry on as standalone
+posts.
+
+Publicly, `/series/[slug]` lists the parts in reading order, and a post that
+belongs to one carries a "Part 2 of 5 · Series Title" line linking back.
+
+Ordering and numbering come from `published_at`, counting published posts only.
+So "Part 2" means the second one a reader saw, and a draft sitting in the
+middle of a series does not silently shift every number after it. A series with
+nothing published yet 404s rather than showing an empty page.
+
+---
+
+## Search
+
+Postgres full-text search — no external service.
+
+`posts.search_vector` is a **generated column**, maintained by Postgres itself,
+so it cannot drift from the row the way a trigger or an application-maintained
+column can. It is weighted:
+
+| Weight | Source |
+| --- | --- |
+| A | title |
+| B | excerpt |
+| C | body, with HTML tags stripped |
+
+so a title match outranks a passing mention in the body. A GIN index backs it.
+
+`/search?q=` ranks with `ts_rank`. Queries go through `websearch_to_tsquery`,
+which accepts what a reader would actually type — `"quoted phrases"`,
+`-exclusions` — and treats stray operators as text instead of raising a syntax
+error. An empty query invites one rather than listing everything; a query with
+no matches says so. Results are `noindex`, since a search results page has no
+business in someone else's index.
+
+---
+
+## Open Graph images
+
+Cards are generated **at build time** into `public/og/<slug>.png` by
+[`scripts/generate-og-images.ts`](scripts/generate-og-images.ts), and served as
+static assets.
+
+This is a deliberate departure from the obvious approach. Next's
+`opengraph-image.tsx` renders on demand, which pulls satori and the resvg WASM
+into the Worker bundle — measured at **3289 KiB gzipped against Cloudflare's
+3072 KiB limit**, so the app would no longer deploy. Pre-rendering the route
+only recovered 62 KiB; the renderer is bundled either way. Running the same
+renderer in Node during the build produces the same images, ships them as
+assets (which do not count toward the Worker limit), and costs nothing per
+request.
+
+The trade-off: a post published *after* a deploy has no card of its own until
+the next build. The page lists the site-wide `/og/default.png` as a second
+`og:image` for that window. `npm run build` regenerates them, so a redeploy
+fixes it; on Cloudflare's paid plan (10 MiB) the built-in route becomes viable
+again.
+
+`scripts/assets/*.ttf` is Noto Serif, used only by that script — satori has no
+access to CSS or system fonts, so the bytes have to be handed to it. Those
+files never reach the Worker or the browser.
+
+---
+
 ## The editor
 
 `/admin/posts/[id]`, with `new` as a special id. Tiptap 3 with a fixed
@@ -590,23 +868,37 @@ and its `media` row in place — worth a sweep when the media library grows.
 src/
   app/
     (public)/layout.tsx             site chrome for every reading page
-    (public)/page.tsx               home feed
+    (public)/page.tsx               home feed, black-canvas framed
+    (public)/(reading)/layout.tsx   plain white chrome for reading pages
     (public)/page/[page]/           older feed pages
     (public)/[slug]/page.tsx        the post
     (public)/tag/[tag]/page.tsx     posts by tag
+    (public)/series/[slug]/page.tsx posts in a series, in reading order
+    (public)/search/page.tsx        full-text search
     (public)/not-found.tsx          real 404 for drafts and unknown slugs
     rss.xml/route.ts                RSS 2.0
     admin/login/page.tsx            sign-in (outside the dashboard chrome)
     admin/(dashboard)/page.tsx      post list, filterable by status
     admin/(dashboard)/posts/[id]/   the editor; `new` is a special id
+    admin/(dashboard)/comments/     moderation queue
+    admin/(dashboard)/series/       series management
     api/posts/…                     post CRUD (Phase 1)
     api/auth/login|logout/          session in, session out
     api/media/route.ts              upload + recent uploads
+    api/comments/                   public submission + moderation
+    api/series/                     series management
     media/[...key]/route.ts         serves objects back out of R2
   components/
     public/PostList.tsx             feed layout, shared by home and tag pages
     public/PostMeta.tsx             date, reading time, tags
     public/Pagination.tsx           numbered pages
+    public/Wordmark.tsx             display type, hero and post scale
+    public/PostCard.tsx             one grid cell, per Design.md §5
+    public/PostGrid.tsx             3-column grid with hairline dividers
+    public/HomeFeed.tsx             category filter + the grid it controls
+    public/SiteChrome.tsx           nav, canvas credit, reading footer
+    public/CommentThread.tsx        approved comments, one level deep
+    public/CommentForm.tsx          submission form with the honeypot
     editor/extensions.ts            the document schema, defined once
     editor/EditorToolbar.tsx        formatting controls
     admin/PostEditorLoader.tsx      client-only dynamic import of the editor
@@ -620,6 +912,8 @@ src/
     public-posts.ts                 every public read — published-only, in one place
     revalidate.ts                   which cached pages a write drops
     site.ts                         site name, origin, date formatting
+    comments.ts                     submission, threading, moderation
+    series.ts                       series CRUD and part numbering
     posts.ts                        post repository — all post SQL
     tags.ts                         tag upsert + association sync
     slug.ts                         slugify, uniqueness, SQLSTATE detection
@@ -635,7 +929,8 @@ src/
     http.ts                         one place where errors become responses
   proxy.ts                          the single auth checkpoint
 drizzle/                            generated SQL migrations
-scripts/                            migrate.ts, smoke.sh
+scripts/                            migrate.ts, smoke.sh,
+                                    generate-og-images.ts
 tests/                              integration tests + Neon HTTP shim
 ```
 
@@ -656,8 +951,19 @@ publish/unpublish · filterable admin post list.
 pass with a self-hosted serif, dark mode and AA contrast · RSS 2.0 · ISR with
 on-demand revalidation.
 
-**Not yet:** full-text search · series grouping · Open Graph image generation
-(Phase 4).
+**Done — Phase 4.** Series grouping with public pages and per-post context ·
+Postgres full-text search · build-time Open Graph cards · reader comments with
+honeypot and rate limiting, a moderation queue, and author replies.
+
+**Done — design pass.** `Design.md` implemented across the public routes:
+black-canvas homepage framing, Anton hero wordmark, category filter, 3-column
+hairline grid, duotone covers, restyled post and tag pages. See
+[Design system](#design-system).
+
+**Deliberately not built:** email notification of new comments · commenter
+accounts · comment editing or deletion by the commenter · captcha. The first is
+the natural next addition; the rest need an identity model this blog does not
+have.
 
 ---
 

@@ -1,5 +1,7 @@
 import { revalidatePath } from "next/cache";
 import type { BlogDatabase } from "@/db/client";
+import { inArray } from "drizzle-orm";
+import { series } from "@/db/schema";
 import { POSTS_PER_PAGE, countPublished } from "./public-posts";
 
 /**
@@ -12,7 +14,13 @@ import { POSTS_PER_PAGE, countPublished } from "./public-posts";
  */
 export async function revalidatePublicPages(
   db: BlogDatabase,
-  affected: { slugs?: string[]; tagSlugs?: string[] } = {},
+  affected: {
+    slugs?: string[];
+    tagSlugs?: string[];
+    seriesSlugs?: string[];
+    /** Resolved to slugs here, so callers can pass what a post row holds. */
+    seriesIds?: (string | null)[];
+  } = {},
 ): Promise<void> {
   try {
     const paths = new Set<string>(["/", "/rss.xml"]);
@@ -25,6 +33,20 @@ export async function revalidatePublicPages(
     // Both the tags gained and the tags lost.
     for (const tagSlug of affected.tagSlugs ?? []) {
       if (tagSlug) paths.add(`/tag/${tagSlug}`);
+    }
+    for (const seriesSlug of affected.seriesSlugs ?? []) {
+      if (seriesSlug) paths.add(`/series/${seriesSlug}`);
+    }
+
+    const seriesIds = (affected.seriesIds ?? []).filter(
+      (id): id is string => typeof id === "string",
+    );
+    if (seriesIds.length > 0) {
+      const rows = await db
+        .select({ slug: series.slug })
+        .from(series)
+        .where(inArray(series.id, [...new Set(seriesIds)]));
+      for (const row of rows) paths.add(`/series/${row.slug}`);
     }
 
     // A new post shifts every later post down a page, so the whole run has to

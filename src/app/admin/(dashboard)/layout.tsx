@@ -16,6 +16,8 @@ export default function DashboardLayout({
           Posts
         </Link>
         <div className="row">
+          <Link href="/admin/comments">Comments</Link>
+          <Link href="/admin/series">Series</Link>
           <Link href="/admin/posts/new">New post</Link>
           <LogoutButton />
         </div>

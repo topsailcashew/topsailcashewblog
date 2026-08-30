@@ -48,9 +48,12 @@ export async function findAvailableSlug(
     .from(posts)
     .where(excludeId ? and(collisionFilter, ne(posts.id, excludeId)) : collisionFilter);
 
-  const taken = new Set(rows.map((row) => row.slug));
-  if (!taken.has(base)) return base;
+  return firstFreeSlug(base, new Set(rows.map((row) => row.slug)));
+}
 
+/** `base`, else the first free `base-2`, `base-3`, … Shared with series slugs. */
+export function firstFreeSlug(base: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(base)) return base;
   for (let suffix = 2; ; suffix += 1) {
     const candidate = `${base}-${suffix}`;
     if (!taken.has(candidate)) return candidate;
