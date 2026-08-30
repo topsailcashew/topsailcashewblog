@@ -60,7 +60,7 @@ export function SeriesManager({ series }: { series: SerializedSeries[] }) {
             onChange={(event) => setDescription(event.target.value)}
             style={{ flex: 1, minWidth: "14rem" }}
           />
-          <button type="submit" disabled={pending || !title.trim()}>
+          <button type="submit" className="btn btn--primary" disabled={pending || !title.trim()}>
             Create
           </button>
         </div>
@@ -77,8 +77,8 @@ export function SeriesManager({ series }: { series: SerializedSeries[] }) {
       ) : (
         <ul className="post-rows">
           {series.map((entry) => (
-            <li key={entry.id} className="card">
-              <div className="row" style={{ justifyContent: "space-between" }}>
+            <li key={entry.id}>
+              <div className="post-row-head">
                 {editing === entry.id ? (
                   <input
                     aria-label={`Rename ${entry.title}`}
@@ -87,11 +87,9 @@ export function SeriesManager({ series }: { series: SerializedSeries[] }) {
                     style={{ flex: 1 }}
                   />
                 ) : (
-                  <strong>{entry.title}</strong>
+                  <span className="post-row-title">{entry.title}</span>
                 )}
-                <span className="pill">
-                  {entry.post_count} published
-                </span>
+                <span className="meta">{entry.post_count} published</span>
               </div>
               <p className="muted">
                 /series/{entry.slug}
@@ -102,6 +100,7 @@ export function SeriesManager({ series }: { series: SerializedSeries[] }) {
                   <>
                     <button
                       type="button"
+                      className="btn btn--small btn--primary"
                       disabled={pending || !draftTitle.trim()}
                       onClick={() =>
                         run(() =>
@@ -115,13 +114,14 @@ export function SeriesManager({ series }: { series: SerializedSeries[] }) {
                     >
                       Save
                     </button>
-                    <button type="button" onClick={() => setEditing(null)}>
+                    <button type="button" className="btn btn--small" onClick={() => setEditing(null)}>
                       Cancel
                     </button>
                   </>
                 ) : (
                   <button
                     type="button"
+                    className="btn btn--small"
                     disabled={pending}
                     onClick={() => {
                       setEditing(entry.id);
@@ -133,6 +133,7 @@ export function SeriesManager({ series }: { series: SerializedSeries[] }) {
                 )}
                 <button
                   type="button"
+                  className="btn btn--small btn--danger"
                   disabled={pending}
                   onClick={() => {
                     if (

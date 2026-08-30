@@ -43,9 +43,9 @@ export default async function CommentsPage({
   }
 
   return (
-    <main>
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h1>Comments</h1>
+    <main className="admin-main">
+      <div className="admin-head">
+        <h1 className="admin-title">Comments</h1>
         <div className="row filter-row">
           <FilterLink current={filter} value="pending" count={counts.pending}>
             Pending
@@ -61,7 +61,7 @@ export default async function CommentsPage({
           </FilterLink>
           <Link
             href="/admin/comments?status=all"
-            className={filter === undefined ? "pill is-active" : "pill"}
+            className={filter === undefined ? "tag-pill is-active" : "tag-pill"}
           >
             All
           </Link>
@@ -84,12 +84,12 @@ export default async function CommentsPage({
 
       <ul className="post-rows">
         {comments.map((comment) => (
-          <li key={comment.id} className="card">
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <strong>{comment.author_name}</strong>
-              <span className="pill">{comment.status}</span>
+          <li key={comment.id}>
+            <div className="post-row-head">
+              <span className="mini-name">{comment.author_name}</span>
+              <span className={`status--${comment.status === "approved" ? "published" : "draft"}`}>{comment.status}</span>
             </div>
-            <p className="muted">
+            <p className="meta">
               {/* Shown to the moderator only — never rendered publicly. */}
               {comment.author_email} · {formatDate(comment.created_at)}
               {comment.parent_id && " · reply"}
@@ -126,7 +126,7 @@ function FilterLink({
   return (
     <Link
       href={`/admin/comments?status=${value}`}
-      className={active ? "pill is-active" : "pill"}
+      className={active ? "tag-pill is-active" : "tag-pill"}
       aria-current={active ? "page" : undefined}
     >
       {children} {count > 0 && <span className="pill-count">{count}</span>}

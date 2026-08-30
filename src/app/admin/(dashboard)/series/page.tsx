@@ -14,8 +14,10 @@ export default async function SeriesAdminPage() {
   }
 
   return (
-    <main>
-      <h1>Series</h1>
+    <main className="admin-main">
+      <div className="admin-head">
+        <h1 className="admin-title">Series</h1>
+      </div>
       <p className="muted">
         Group posts that belong together. Order on the public page follows
         publication date.

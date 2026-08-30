@@ -73,7 +73,7 @@ export function CommentForm({ postId, parentId, onSubmitted, compact }: Props) {
 
   return (
     <form className={compact ? "comment-form is-compact" : "comment-form"} onSubmit={submit}>
-      {!compact && <h3>Leave a comment</h3>}
+      {!compact && <h3 className="label">Leave a comment</h3>}
 
       <div className="comment-fields">
         <label>
@@ -116,7 +116,7 @@ export function CommentForm({ postId, parentId, onSubmitted, compact }: Props) {
       </div>
 
       <div className="row comment-actions">
-        <button type="submit" disabled={state === "sending"}>
+        <button type="submit" className="btn btn--primary" disabled={state === "sending"}>
           {state === "sending" ? "Sending…" : parentId ? "Post reply" : "Post comment"}
         </button>
         <span className="muted">Comments are read before they appear.</span>

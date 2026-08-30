@@ -41,11 +41,12 @@ export function CommentActions({
 
   return (
     <div className="comment-admin-actions">
-      <div className="row">
+      <>
         {NEXT_STATUS.filter((entry) => entry.status !== status).map((entry) => (
           <button
             key={entry.status}
             type="button"
+            className={entry.status === "approved" ? "btn btn--small btn--primary" : "btn btn--small"}
             disabled={pending}
             onClick={() =>
               run(() =>
@@ -60,10 +61,10 @@ export function CommentActions({
             {entry.label}
           </button>
         ))}
-        <button type="button" disabled={pending} onClick={() => setReplying((v) => !v)}>
+        <button type="button" className="btn btn--small" disabled={pending} onClick={() => setReplying((v) => !v)}>
           {replying ? "Cancel reply" : "Reply"}
         </button>
-      </div>
+      </>
 
       {replying && (
         <div className="comment-admin-reply">
@@ -75,6 +76,7 @@ export function CommentActions({
           />
           <button
             type="button"
+            className="btn btn--small btn--primary"
             disabled={pending || replyBody.trim() === ""}
             onClick={() =>
               run(() =>

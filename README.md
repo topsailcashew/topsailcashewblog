@@ -580,6 +580,36 @@ logs a warning when it is unset.
 The public site follows [`Design.md`](Design.md) — editorial black and white,
 one hot accent, condensed display type doing the heavy lifting.
 
+### One system, measured
+
+A UI audit found the design layer had drifted badly. What it looked like
+before, and what it is now:
+
+| | Before | After |
+| --- | --- | --- |
+| Uppercase label styles | 7, with 5 different tracking values | **1** (`.label`) |
+| Button geometries | 5 (heights 17 / 23 / 38 / 41 / 54px) | **3** (pill, text, standard 40px) |
+| Border-radius values | 7 (0, 4, 5, 6, 8, 999px, 50%) | **2** (pills, avatar) |
+
+Specific things that were wrong:
+
+- A post's title was condensed uppercase in the grid and serif on its own page
+  — the same words in two faces.
+- The post title was serif but its own `h2` subheadings were condensed
+  uppercase, so the subheads shouted louder than the headline above them.
+- Every card printed its date twice, once in the top row and again in the
+  metadata row. §5 does list it twice, but that is an artefact of adapting the
+  reference's byline credit line, and it reads as a bug.
+- Commenters' names were rendered as 11px tracked-out capitals. A person's
+  name is not a label.
+- The middle column of the 3-up grid was narrower than its neighbours: gutters
+  were padding, so the middle cell carried it on both sides while the outer
+  cells carried one. Covers rendered at different heights and rows fell out of
+  alignment. The gutter is now `column-gap` with the rule drawn as a
+  pseudo-element inside it, so all three columns are identical.
+- The homepage stated its tagline twice — once under the hero, once in the
+  credit line under the frame.
+
 ### Tokens
 
 Everything lives in `:root` in [`globals.css`](src/app/globals.css). No

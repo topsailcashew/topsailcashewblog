@@ -20,7 +20,7 @@ export function CommentThread({
 
   return (
     <section className="comments" id="comments" aria-labelledby="comments-heading">
-      <h2 id="comments-heading">
+      <h2 id="comments-heading" className="label">
         {total === 0 ? "Comments" : `${total} ${total === 1 ? "comment" : "comments"}`}
       </h2>
 

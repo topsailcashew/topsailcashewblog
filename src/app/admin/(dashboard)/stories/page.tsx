@@ -30,9 +30,9 @@ export default async function AdminStoriesPage({
   }
 
   return (
-    <main>
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h1>Posts</h1>
+    <main className="admin-main">
+      <div className="admin-head">
+        <h1 className="admin-title">Stories</h1>
         <div className="row filter-row">
           <FilterLink current={filter} value={undefined}>
             All
@@ -60,14 +60,14 @@ export default async function AdminStoriesPage({
 
       <ul className="post-rows">
         {posts.map((post) => (
-          <li key={post.id} className="card">
-            <div className="row" style={{ justifyContent: "space-between" }}>
+          <li key={post.id}>
+            <div className="post-row-head">
               <Link href={`/admin/posts/${post.id}`} className="post-row-title">
                 {post.title}
               </Link>
-              <span className="pill">{post.status}</span>
+              <span className={`status--${post.status}`}>{post.status}</span>
             </div>
-            <p className="muted">
+            <p className="meta">
               /{post.slug} · updated {new Date(post.updated_at).toLocaleString()}
               {post.tags.length > 0 && ` · ${post.tags.map((tag) => tag.name).join(", ")}`}
             </p>
@@ -91,7 +91,7 @@ function FilterLink({
   return (
     <Link
       href={value ? `/admin/stories?status=${value}` : "/admin/stories"}
-      className={active ? "pill is-active" : "pill"}
+      className={active ? "tag-pill is-active" : "tag-pill"}
       aria-current={active ? "page" : undefined}
     >
       {children}

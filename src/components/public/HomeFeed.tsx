@@ -46,7 +46,7 @@ export function HomeFeed({ posts }: { posts: PostSummary[] }) {
     <>
       {categories.length > 0 && (
         <div className="categories">
-          <span className="label categories-label">Categories</span>
+          <span className="label">Categories</span>
           <div className="categories-pills" role="group" aria-label="Filter by category">
             <button
               type="button"

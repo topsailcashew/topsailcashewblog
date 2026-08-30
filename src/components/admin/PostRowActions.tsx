@@ -12,6 +12,7 @@ export function PostRowActions({ id, title }: { id: string; title: string }) {
     <span className="row-actions">
       <button
         type="button"
+        className="btn btn--small"
         title={`Edit ${title}`}
         aria-label={`Edit ${title}`}
         onClick={() => router.push(`/admin/posts/${id}`)}
@@ -20,6 +21,7 @@ export function PostRowActions({ id, title }: { id: string; title: string }) {
       </button>
       <button
         type="button"
+        className="btn btn--small btn--danger"
         title={`Delete ${title}`}
         aria-label={`Delete ${title}`}
         disabled={pending}

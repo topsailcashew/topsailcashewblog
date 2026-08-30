@@ -15,7 +15,7 @@ export function CommentReply({
 
   if (!open) {
     return (
-      <button type="button" className="link-button" onClick={() => setOpen(true)}>
+      <button type="button" className="btn btn--quiet" onClick={() => setOpen(true)}>
         Reply
       </button>
     );
@@ -24,7 +24,7 @@ export function CommentReply({
   return (
     <div className="comment-reply-box">
       <CommentForm postId={postId} parentId={parentId} compact />
-      <button type="button" className="link-button" onClick={() => setOpen(false)}>
+      <button type="button" className="btn btn--quiet" onClick={() => setOpen(false)}>
         Cancel
       </button>
     </div>

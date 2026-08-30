@@ -237,7 +237,7 @@ export function PostEditor({
     <div className="editor-page">
       <header className="editor-bar">
         <div className="row">
-          <span className="pill">{status}</span>
+          <span className={`status--${status}`}>{status}</span>
           <SaveStatus state={state} dirty={isDirty} />
         </div>
         <div className="row">

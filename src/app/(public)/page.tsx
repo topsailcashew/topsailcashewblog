@@ -4,7 +4,6 @@ import { Pagination } from "@/components/public/Pagination";
 import { CanvasCredit, SiteNav } from "@/components/public/SiteChrome";
 import { Wordmark } from "@/components/public/Wordmark";
 import { getFeed } from "@/lib/public-posts";
-import { siteConfig } from "@/lib/site";
 
 /**
  * ISR. Rendered once and served from KV until a write invalidates it; the
@@ -21,9 +20,10 @@ export default async function HomePage() {
       <div className="canvas-page">
         <SiteNav />
 
+        {/* Wordmark only — the tagline it used to carry is the credit line
+            under the frame, which §5 already specifies. */}
         <div id="content" className="hero">
-          <Wordmark as="h1" scale="hero" />
-          <p className="hero-tagline">{siteConfig.description}</p>
+          <Wordmark as="h1" />
         </div>
 
         <HomeFeed posts={feed.posts} />

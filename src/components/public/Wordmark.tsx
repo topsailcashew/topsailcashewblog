@@ -1,7 +1,11 @@
 import { siteConfig } from "@/lib/site";
 
 /**
- * The display-type wordmark (Design.md §8), reusable at hero and post scale.
+ * The masthead (Design.md §8).
+ *
+ * This is the *only* place the display face appears. Titles elsewhere — cards,
+ * posts, page heads, prose headings — are the serif, so a post's title looks
+ * the same in the grid as it does on its own page.
  *
  * Condensation is the typeface's own (Anton), not letter-spacing — §4 is
  * explicit that faking it is not acceptable.
@@ -16,23 +20,15 @@ function heroWordmark(): string {
 }
 
 export function Wordmark({
-  as: Tag = "span",
-  scale = "hero",
-  children,
+  as: Tag = "h1",
   className,
 }: {
-  as?: "h1" | "h2" | "span" | "p";
-  scale?: "hero" | "post" | "card";
-  children?: React.ReactNode;
+  as?: "h1" | "p" | "span";
   className?: string;
 }) {
   return (
-    <Tag
-      className={[`wordmark`, `wordmark--${scale}`, className]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {children ?? (scale === "hero" ? heroWordmark() : siteConfig.name)}
+    <Tag className={["wordmark--hero", className].filter(Boolean).join(" ")}>
+      {heroWordmark()}
     </Tag>
   );
 }

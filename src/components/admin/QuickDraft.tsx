@@ -38,7 +38,7 @@ export function QuickDraft() {
 
   return (
     <div className="panel">
-      <h2 className="panel-title">Quick Draft</h2>
+      <h2 className="label">Quick draft</h2>
       <input
         aria-label="Post title"
         placeholder="Post Title"
@@ -55,7 +55,7 @@ export function QuickDraft() {
       <div className="panel-actions">
         <button
           type="button"
-          className="button-primary"
+          className="btn btn--primary"
           disabled={pending || (!title.trim() && !body.trim())}
           onClick={save}
         >

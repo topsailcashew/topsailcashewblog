@@ -33,8 +33,10 @@ export default async function AdminDashboard() {
   }
 
   return (
-    <main className="dashboard">
-      <h1 className="dashboard-title">Admin Dashboard</h1>
+    <main className="admin-main">
+      <div className="admin-head">
+        <h1 className="admin-title">Dashboard</h1>
+      </div>
 
       {error && (
         <p className="error" role="alert">
@@ -46,7 +48,7 @@ export default async function AdminDashboard() {
         <div className="dashboard-main">
           <div className="panel-row">
             <div className="panel">
-              <h2 className="panel-title">Overview</h2>
+              <h2 className="label">Overview</h2>
               <div className="stat-grid">
                 <Stat label="Stories" value={postCounts.published} href="/admin/stories?status=published" />
                 <Stat label="Drafts" value={postCounts.draft} href="/admin/stories?status=draft" />
@@ -59,7 +61,7 @@ export default async function AdminDashboard() {
           </div>
 
           <div className="panel">
-            <h2 className="panel-title">Published Stories</h2>
+            <h2 className="label">Recent stories</h2>
             {posts.length === 0 ? (
               <p className="muted">
                 Nothing yet. <Link href="/admin/posts/new">Write the first one.</Link>
@@ -82,11 +84,11 @@ export default async function AdminDashboard() {
                           <Link href={`/admin/posts/${post.id}`}>{post.title}</Link>
                         </td>
                         <td>
-                          <span className={`status status--${post.status}`}>
+                          <span className={`status--${post.status}`}>
                             {post.status}
                           </span>
                         </td>
-                        <td className="muted">{formatDate(post.updated_at)}</td>
+                        <td>{formatDate(post.updated_at)}</td>
                         <td>
                           <PostRowActions id={post.id} title={post.title} />
                         </td>
@@ -101,14 +103,14 @@ export default async function AdminDashboard() {
 
         <aside className="dashboard-aside">
           <div className="panel">
-            <h2 className="panel-title">Recent Comments</h2>
+            <h2 className="label">Awaiting moderation</h2>
             {pendingComments.length === 0 ? (
               <p className="muted">Nothing waiting. The queue is clear.</p>
             ) : (
               <ul className="mini-list">
                 {pendingComments.map((comment) => (
                   <li key={comment.id}>
-                    <strong>{comment.author_name}</strong>
+                    <span className="mini-name">{comment.author_name}</span>
                     {comment.post && (
                       <Link href={`/${comment.post.slug}`} className="mini-context">
                         {comment.post.title}
@@ -127,7 +129,7 @@ export default async function AdminDashboard() {
           </div>
 
           <div className="panel">
-            <h2 className="panel-title">Recent Media</h2>
+            <h2 className="label">Recent media</h2>
             {media.length === 0 ? (
               <p className="muted">No uploads yet.</p>
             ) : (
@@ -161,7 +163,7 @@ function Stat({
 }) {
   return (
     <Link href={href} className="stat">
-      <span className="stat-label">{label}</span>
+      <span className="label">{label}</span>
       <span className="stat-value">{value}</span>
     </Link>
   );

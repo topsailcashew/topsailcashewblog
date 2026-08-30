@@ -107,7 +107,7 @@ export default async function PostPage({ params }: { params: Params }) {
           {seriesContext && (
             <Link
               href={`/series/${seriesContext.series.slug}`}
-              className="article-series"
+              className="label article-series"
             >
               Part {seriesContext.part} of {seriesContext.total} ·{" "}
               {seriesContext.series.title}
@@ -138,7 +138,7 @@ export default async function PostPage({ params }: { params: Params }) {
                 <Link
                   key={tag.slug}
                   href={`/tag/${tag.slug}`}
-                  className="tag-pill tag-pill--quiet"
+                  className="tag-pill"
                 >
                   {tag.name}
                 </Link>
@@ -187,15 +187,11 @@ export default async function PostPage({ params }: { params: Params }) {
                 </li>
               ))}
             </ul>
+            <Link href="/stories" className="aside-more">
+              See all stories →
+            </Link>
           </section>
         )}
-
-        <section className="aside-block">
-          <h2 className="aside-title">More from {siteConfig.name}</h2>
-          <Link href="/stories" className="aside-more">
-            See all stories →
-          </Link>
-        </section>
       </aside>
     </div>
   );

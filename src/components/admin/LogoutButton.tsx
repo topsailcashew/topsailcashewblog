@@ -10,6 +10,7 @@ export function LogoutButton() {
   return (
     <button
       type="button"
+      className="btn btn--small"
       disabled={pending}
       onClick={() =>
         startTransition(async () => {

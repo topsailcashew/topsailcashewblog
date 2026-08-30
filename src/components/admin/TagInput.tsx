@@ -34,7 +34,7 @@ export function TagInput({
     <div className="tag-input">
       <div className="row">
         {tags.map((tag, index) => (
-          <span key={`${tag}-${index}`} className="pill tag-chip">
+          <span key={`${tag}-${index}`} className="tag-pill tag-chip">
             {tag}
             <button
               type="button"

@@ -1,30 +1,21 @@
 import Link from "next/link";
 import type { PostSummary } from "@/lib/public-posts";
 import { formatDate } from "@/lib/site";
-import { Wordmark } from "./Wordmark";
 
 /**
- * One cell of the grid, in the exact order Design.md §5 sets out:
- * date + tag pill, cover, title, two-line excerpt, metadata row.
+ * One cell of the grid (Design.md §5): tag, cover, title, two-line excerpt,
+ * metadata.
  *
- * The date appears in both the top row and the metadata row because §5 lists
- * it in both — the bottom row is the reference's credit line with the byline
- * dropped (§9).
+ * §5 lists the date twice — once in the top row and again in the metadata row,
+ * an artefact of adapting the reference's byline credit line. Printing it
+ * twice on one card reads as a bug, so it appears once, in the metadata row
+ * where the reading time is.
  */
 export function PostCard({ post }: { post: PostSummary }) {
   const primaryTag = post.tags[0];
 
   return (
     <article className="grid-item" data-tags={post.tags.map((t) => t.slug).join(" ")}>
-      <div className="card-top">
-        <span className="card-date">{formatDate(post.publishedAt)}</span>
-        {primaryTag && (
-          <Link href={`/tag/${primaryTag.slug}`} className="tag-pill tag-pill--quiet">
-            {primaryTag.name}
-          </Link>
-        )}
-      </div>
-
       <Link href={`/${post.slug}`} className="card-link">
         {post.coverImageUrl && (
           <figure className="card-figure">
@@ -38,17 +29,26 @@ export function PostCard({ post }: { post: PostSummary }) {
             />
           </figure>
         )}
-        <Wordmark as="h2" scale="card" className="card-title">
-          {post.title}
-        </Wordmark>
+      </Link>
+
+      {primaryTag && (
+        <div className="card-top">
+          <Link href={`/tag/${primaryTag.slug}`} className="tag-pill">
+            {primaryTag.name}
+          </Link>
+        </div>
+      )}
+
+      <Link href={`/${post.slug}`} className="card-link">
+        <h2 className="card-title">{post.title}</h2>
       </Link>
 
       {post.excerpt && <p className="card-excerpt">{post.excerpt}</p>}
 
-      <div className="card-meta">
-        <span>{formatDate(post.publishedAt)}</span>
-        <span className="card-meta-dot" aria-hidden="true">
-          —
+      <div className="meta card-meta">
+        <time dateTime={post.publishedAt}>{formatDate(post.publishedAt)}</time>
+        <span className="meta-sep" aria-hidden="true">
+          /
         </span>
         <span>{post.readingMinutes} min read</span>
       </div>

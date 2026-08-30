@@ -48,7 +48,7 @@ export default async function SearchPage({
             aria-label="Search posts"
             autoFocus
           />
-          <button type="submit">Search</button>
+          <button type="submit" className="btn btn--primary">Search</button>
         </form>
       </div>
 
@@ -62,7 +62,7 @@ export default async function SearchPage({
         </p>
       ) : (
         <>
-          <p className="muted search-count">
+          <p className="meta search-count">
             {results.length} {results.length === 1 ? "result" : "results"} for{" "}
             <strong>{query}</strong>
           </p>
