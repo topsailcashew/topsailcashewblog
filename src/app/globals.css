@@ -348,29 +348,39 @@ form { margin-bottom: 1.5rem; }
    Post grid (§5) — hairline dividers on both axes
    ========================================================================= */
 
+/*
+  Dividers are borders on the cells themselves, not a background showing
+  through a 1px gap. The gap technique paints the whole grid area, so a row
+  that does not fill every column leaves the empty cells as solid slabs —
+  which is exactly what two posts in a three-column grid looked like.
+*/
 .grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  /*
-    Dividers are drawn with gap + a background, so every cell shares one
-    hairline rather than doubling up where two borders meet.
-  */
-  gap: 1px;
-  background: var(--border);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 .grid-item {
-  background: var(--bg);
   padding: clamp(1.25rem, 2.2vw, 1.9rem) clamp(1rem, 1.8vw, 1.5rem);
   display: flex;
   flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
 }
+/* No rule hanging off the right edge, or off the end of a part-filled row. */
+.grid-item:nth-child(3n),
+.grid-item:last-child { border-right: none; }
 
 @media (max-width: 60rem) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-item:nth-child(3n) { border-right: 1px solid var(--border); }
+  .grid-item:nth-child(2n),
+  .grid-item:last-child { border-right: none; }
 }
 @media (max-width: 38rem) {
   .grid { grid-template-columns: minmax(0, 1fr); }
+  .grid-item,
+  .grid-item:nth-child(2n),
+  .grid-item:nth-child(3n) { border-right: none; }
 }
 
 .grid-empty {
