@@ -299,10 +299,9 @@ same bindings and same APIs as production, but not your account's.
 
 ### Worker size
 
-The dry run reports **2937 KiB gzipped** against Cloudflare's 3 MB free-plan
-limit — about **135 KiB of headroom**. The design pass cost 9 KiB: the two new
-webfonts ship as static assets, which are uploaded separately and do not count
-toward the Worker script.
+The dry run reports **2941 KiB gzipped** against Cloudflare's 3 MB free-plan
+limit — about **131 KiB of headroom**. The webfonts ship as static assets,
+which are uploaded separately and do not count toward the Worker script.
 
 Phase 4 nearly broke this. Generating Open Graph images inside the Worker
 measured 3289 KiB, 217 KiB *over* the limit, so that work moved to a build step
@@ -606,6 +605,17 @@ white (3.12:1).
 
 ### Type
 
+Loaded with `next/font/local` from `src/fonts`, **not** `next/font/google`.
+The Google loader fetches from fonts.googleapis.com at build time, so a build
+on a machine or CI runner that cannot reach it fails outright — which is
+exactly what happened here once the cached download was cleared. The eight
+woff2 files (180 KB) are committed, and the build has no network dependency.
+
+The `next/font` bindings are named `displayFace` / `uiFace` / `bodyFace`
+because the loader derives the `@font-face` family name from the JS variable —
+`const serif` produced a family literally called `serif`, shadowing the CSS
+generic keyword.
+
 | Role | Family | Why |
 | --- | --- | --- |
 | Hero and titles | **Anton** | §4 asks for "a true condensed-black cut, don't fake condensation via `letter-spacing` alone". Archivo Black — the prompt's fallback suggestion — is a black weight at *normal* width, so it would have meant faking it. Anton is genuinely condensed. |
@@ -635,6 +645,28 @@ ever gains a tinted shadow, that is the point to revisit it.
 The black canvas is homepage-only (§3). Reading pages sit in a
 `(reading)` route group with their own layout on plain white, so the framing
 cannot leak onto long-form text.
+
+### Where the reference screenshots override Design.md
+
+A later round of reference screenshots set a different direction for three
+surfaces. The homepage still follows Design.md; these three follow the
+screenshots:
+
+- **Nav** — the wordmark is `topsailcashew`, one lowercase word in the serif,
+  with Home / Stories / search on the left and the author block on the right.
+  It reads as an identity mark, which is why it does not use the condensed
+  display face the hero does.
+- **Post page** — serif title rather than the condensed cut, a byline (which
+  Design.md §9 had explicitly dropped for a single-author site), a **contained**
+  cover rather than full-bleed, and a "Read Next" sidebar. §6 left the cover
+  question open — "evaluate both at implementation time" — and the screenshot
+  settles it.
+- **Admin dashboard** — overview stats, quick draft, story table, comment queue
+  and recent media, in panels.
+
+The screenshots use a slate-teal for buttons. That was **not** adopted: a
+second accent would fight Design.md §9's "one accent colour" and the homepage.
+Primary buttons are `--fg` with the orange on hover.
 
 ### Decisions worth knowing
 

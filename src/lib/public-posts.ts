@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ne, sql } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
 import { postTags, posts, series, tags } from "@/db/schema";
 import { serializePost, type SerializedPost } from "./posts";
@@ -187,6 +187,60 @@ export async function listPublishedSeriesSlugs(
     .innerJoin(posts, eq(posts.seriesId, series.id))
     .where(publishedOnly);
   return rows.map((row) => row.slug);
+}
+
+/**
+ * Sidebar suggestions for a post page.
+ *
+ * Posts sharing a tag come first — they are the ones most likely to be worth
+ * reading next — then recent posts fill any remaining slots, so the sidebar is
+ * never short on a site with few tags.
+ */
+export async function getRelatedPosts(
+  db: BlogDatabase,
+  post: { id: string; tags: { slug: string }[] },
+  limit = 3,
+): Promise<PostSummary[]> {
+  const tagSlugs = post.tags.map((tag) => tag.slug);
+  const picked = new Map<string, (typeof posts.$inferSelect)>();
+
+  if (tagSlugs.length > 0) {
+    const sameTag = await db
+      .selectDistinct({ post: posts })
+      .from(posts)
+      .innerJoin(postTags, eq(postTags.postId, posts.id))
+      .innerJoin(tags, eq(tags.id, postTags.tagId))
+      .where(
+        and(
+          publishedOnly,
+          ne(posts.id, post.id),
+          sql`${tags.slug} = any(${sql.param(tagSlugs)}::text[])`,
+        ),
+      )
+      .orderBy(...publishedOrder)
+      .limit(limit);
+    for (const row of sameTag) picked.set(row.post.id, row.post);
+  }
+
+  if (picked.size < limit) {
+    const recent = await db
+      .select()
+      .from(posts)
+      .where(and(publishedOnly, ne(posts.id, post.id)))
+      .orderBy(...publishedOrder)
+      .limit(limit + 1);
+    for (const row of recent) {
+      if (picked.size >= limit) break;
+      if (!picked.has(row.id)) picked.set(row.id, row);
+    }
+  }
+
+  const rows = [...picked.values()].slice(0, limit);
+  const tagsByPost = await getTagsForPosts(
+    db,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => toSummary(serializePost(row, tagsByPost.get(row.id) ?? [])));
 }
 
 /** Full published posts, newest first — the RSS feed's source. */

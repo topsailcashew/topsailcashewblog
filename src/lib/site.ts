@@ -3,10 +3,14 @@
  * code edit, with defaults that work out of the box.
  */
 export const siteConfig = {
-  name: process.env.NEXT_PUBLIC_SITE_NAME ?? "Topsail Cashew",
+  /** One word, lowercase — it is a wordmark, not a title. */
+  name: process.env.NEXT_PUBLIC_SITE_NAME ?? "topsailcashew",
   description:
     process.env.NEXT_PUBLIC_SITE_DESCRIPTION ?? "Essays, notes, and long-form writing.",
   language: "en",
+  /** Shown beside the wordmark in the nav, and as the post byline. */
+  author: process.env.NEXT_PUBLIC_SITE_AUTHOR ?? "Nathaniel Senje",
+  authorRole: process.env.NEXT_PUBLIC_SITE_AUTHOR_ROLE ?? "Personal blog",
 } as const;
 
 /**

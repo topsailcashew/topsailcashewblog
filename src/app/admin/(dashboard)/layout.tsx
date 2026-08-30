@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LogoutButton } from "@/components/admin/LogoutButton";
+import { siteConfig } from "@/lib/site";
 
 /**
  * Chrome for the signed-in admin area. `/admin/login` sits outside this route
@@ -12,13 +13,21 @@ export default function DashboardLayout({
   return (
     <div className="admin-shell">
       <nav className="admin-nav">
-        <Link href="/admin" className="admin-brand">
-          Posts
-        </Link>
-        <div className="row">
-          <Link href="/admin/comments">Comments</Link>
-          <Link href="/admin/series">Series</Link>
-          <Link href="/admin/posts/new">New post</Link>
+        <div className="nav-left">
+          <Link href="/admin" className="nav-mark">
+            {siteConfig.name}
+          </Link>
+          <span className="nav-links">
+            <Link href="/admin">Home</Link>
+            <Link href="/admin/stories">Stories</Link>
+            <Link href="/admin/posts/new">New Post</Link>
+            <Link href="/admin/comments">Comments</Link>
+            <Link href="/admin/series">Series</Link>
+          </span>
+        </div>
+        <div className="nav-author">
+          <span className="nav-author-name">{siteConfig.author}</span>
+          <span className="nav-author-role">{siteConfig.authorRole}</span>
           <LogoutButton />
         </div>
       </nav>

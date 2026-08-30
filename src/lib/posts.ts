@@ -150,6 +150,20 @@ export async function updatePost(
   return { post: serializePost(row, tags), previous };
 }
 
+/** Post counts by status, for the admin overview. */
+export async function countPostsByStatus(
+  db: BlogDatabase,
+): Promise<{ published: number; draft: number }> {
+  const rows = await db
+    .select({ status: posts.status, value: sql<number>`count(*)::int` })
+    .from(posts)
+    .groupBy(posts.status);
+
+  const counts = { published: 0, draft: 0 };
+  for (const row of rows) counts[row.status] = row.value;
+  return counts;
+}
+
 export async function deletePost(db: BlogDatabase, id: string): Promise<void> {
   // post_tags rows go with it via ON DELETE CASCADE.
   const deleted = await db

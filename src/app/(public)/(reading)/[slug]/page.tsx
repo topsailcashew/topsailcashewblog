@@ -7,6 +7,7 @@ import { Wordmark } from "@/components/public/Wordmark";
 import { getApprovedThread } from "@/lib/comments";
 import {
   getPublishedPost,
+  getRelatedPosts,
   listPublishedSlugs,
   readingMinutes,
 } from "@/lib/public-posts";
@@ -75,41 +76,64 @@ export default async function PostPage({ params }: { params: Params }) {
   const post = await getPublishedPost(db, slug);
   if (!post) notFound();
 
-  const [seriesContext, comments] = await Promise.all([
+  const [seriesContext, comments, related] = await Promise.all([
     getSeriesContext(db, { id: post.id, seriesId: post.series_id }),
     getApprovedThread(db, post.id),
+    getRelatedPosts(db, post),
   ]);
 
   const published = post.published_at ?? post.created_at;
 
   return (
-    <article className="post shell-wrap" id="content">
-      <header className="post-head">
-        {seriesContext && (
-          // Small, muted, UI sans, linking to the series page (§6).
-          <Link
-            href={`/series/${seriesContext.series.slug}`}
-            className="post-series"
-          >
-            Part {seriesContext.part} of {seriesContext.total} ·{" "}
-            {seriesContext.series.title}
-          </Link>
+    <div className="article-layout shell-wrap" id="content">
+      <article className="article">
+        {post.cover_image_url && (
+          /*
+            Contained rather than full-bleed. Design.md §6 left this open
+            ("evaluate both at implementation time"); the reference screenshot
+            settles it — a contained cover keeps the image inside the same
+            column as the words, which reads calmer over long-form text.
+          */
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            className="article-cover"
+            src={post.cover_image_url}
+            alt=""
+            fetchPriority="high"
+          />
         )}
 
-        <Wordmark as="h1" scale="post" className="post-title">
-          {post.title}
-        </Wordmark>
+        <header className="article-head">
+          {seriesContext && (
+            <Link
+              href={`/series/${seriesContext.series.slug}`}
+              className="article-series"
+            >
+              Part {seriesContext.part} of {seriesContext.total} ·{" "}
+              {seriesContext.series.title}
+            </Link>
+          )}
 
-        {post.excerpt && <p className="post-standfirst">{post.excerpt}</p>}
+          <h1 className="article-title">{post.title}</h1>
 
-        <div className="post-meta">
-          <time dateTime={published}>{formatDate(published)}</time>
-          <span className="post-meta-dot" aria-hidden="true">
-            —
-          </span>
-          <span>{readingMinutes(post.content_html)} min read</span>
+          <div className="byline">
+            <span className="byline-avatar" aria-hidden="true">
+              {siteConfig.author.slice(0, 1)}
+            </span>
+            <span className="byline-text">
+              <span className="byline-name">
+                Written by {siteConfig.author}
+              </span>
+              <span className="byline-meta">
+                <time dateTime={published}>{formatDate(published)}</time>
+                {" · "}
+                {readingMinutes(post.content_html)} min read
+              </span>
+            </span>
+          </div>
+
           {post.tags.length > 0 && (
-            <span className="tag-list">
+            <div className="article-tags">
               {post.tags.map((tag) => (
                 <Link
                   key={tag.slug}
@@ -119,50 +143,60 @@ export default async function PostPage({ params }: { params: Params }) {
                   {tag.name}
                 </Link>
               ))}
-            </span>
+            </div>
           )}
-        </div>
-      </header>
+        </header>
 
-      {post.cover_image_url && (
-        /* Full-bleed, per §6's "reference leans full-bleed". */
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
-          className="post-cover duotone"
-          src={post.cover_image_url}
-          alt=""
-          fetchPriority="high"
+        {/*
+          content_html is produced by Tiptap's own serializer from this blog's
+          single trusted author, and the schema admits no raw HTML nodes — so
+          this is rendering our own output, not reader input.
+        */}
+        <div
+          className="prose"
+          dangerouslySetInnerHTML={{ __html: post.content_html ?? "" }}
         />
-      )}
 
-      {/*
-        content_html is produced by Tiptap's own serializer from this blog's
-        single trusted author, and the schema admits no raw HTML nodes — so
-        this is rendering our own output, not reader input.
-      */}
-      <div
-        className="prose post-body"
-        dangerouslySetInnerHTML={{ __html: post.content_html ?? "" }}
-      />
+        <CommentThread postId={post.id} comments={comments} />
+      </article>
 
-      <footer className="post-foot">
-        <Link href="/">← All posts</Link>
-        {post.tags.length > 0 && (
-          <span className="tag-list">
-            {post.tags.map((tag) => (
-              <Link
-                key={tag.slug}
-                href={`/tag/${tag.slug}`}
-                className="tag-pill tag-pill--quiet"
-              >
-                {tag.name}
-              </Link>
-            ))}
-          </span>
+      <aside className="article-aside" aria-label="More reading">
+        {related.length > 0 && (
+          <section className="aside-block">
+            <h2 className="aside-title">Read Next</h2>
+            <ul className="aside-list">
+              {related.map((item) => (
+                <li key={item.slug}>
+                  <Link href={`/${item.slug}`} className="aside-item">
+                    {item.coverImageUrl && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        className="aside-thumb"
+                        src={item.coverImageUrl}
+                        alt=""
+                        loading="lazy"
+                      />
+                    )}
+                    <span>
+                      <span className="aside-item-title">{item.title}</span>
+                      <span className="aside-item-meta">
+                        {formatDate(item.publishedAt)}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
-      </footer>
 
-      <CommentThread postId={post.id} comments={comments} />
-    </article>
+        <section className="aside-block">
+          <h2 className="aside-title">More from {siteConfig.name}</h2>
+          <Link href="/stories" className="aside-more">
+            See all stories →
+          </Link>
+        </section>
+      </aside>
+    </div>
   );
 }

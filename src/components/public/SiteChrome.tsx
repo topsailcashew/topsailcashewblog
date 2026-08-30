@@ -1,24 +1,38 @@
 import Link from "next/link";
 import { siteConfig } from "@/lib/site";
 
-/** Nav: wordmark left at UI scale, quiet links and an RSS icon right (§5). */
+/**
+ * Nav bar, matching the reference screenshots.
+ *
+ * The wordmark is the site name set in serif, lowercase, as one word — it
+ * reads as an identity mark rather than a heading, which is why it does not
+ * use the condensed display face the homepage hero does.
+ */
 export function SiteNav() {
   return (
     <header className="nav">
-      <Link href="/" className="nav-mark">
-        {siteConfig.name}
-      </Link>
-      <nav className="nav-links" aria-label="Primary">
-        <Link href="/search">Search</Link>
-        <a href="/rss.xml" className="nav-rss" aria-label="RSS feed">
-          <RssIcon />
-        </a>
-      </nav>
+      <div className="nav-left">
+        <Link href="/" className="nav-mark">
+          {siteConfig.name}
+        </Link>
+        <nav className="nav-links" aria-label="Primary">
+          <Link href="/">Home</Link>
+          <Link href="/stories">Stories</Link>
+          <Link href="/search" className="nav-search" aria-label="Search">
+            <SearchIcon />
+          </Link>
+        </nav>
+      </div>
+
+      <div className="nav-author">
+        <span className="nav-author-name">{siteConfig.author}</span>
+        <span className="nav-author-role">{siteConfig.authorRole}</span>
+      </div>
     </header>
   );
 }
 
-/** Credit line under the framed page (§5 footer). */
+/** Credit line under the framed homepage. */
 export function CanvasCredit() {
   return (
     <p className="canvas-credit">
@@ -27,31 +41,37 @@ export function CanvasCredit() {
   );
 }
 
-/** Footer for reading pages, which have no black frame to sit under. */
+/** Footer for reading and admin pages. */
 export function ReadingFooter() {
   return (
     <footer className="site-footer-plain">
-      <span>
-        © {new Date().getFullYear()} {siteConfig.name}
+      <span className="footer-mark">{siteConfig.name}</span>
+      <nav className="footer-links" aria-label="Footer">
+        <Link href="/">Home</Link>
+        <Link href="/stories">Stories</Link>
+        <a href="/rss.xml">RSS</a>
+      </nav>
+      <span className="footer-credit">
+        © {new Date().getFullYear()} {siteConfig.author}
       </span>
-      <a href="/rss.xml">Subscribe by RSS</a>
     </footer>
   );
 }
 
-function RssIcon() {
+function SearchIcon() {
   return (
     <svg
-      width="13"
-      height="13"
+      width="16"
+      height="16"
       viewBox="0 0 16 16"
-      fill="currentColor"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
       aria-hidden="true"
       focusable="false"
     >
-      <circle cx="3" cy="13" r="2" />
-      <path d="M1 6.5A8.5 8.5 0 0 1 9.5 15h2.6A11.1 11.1 0 0 0 1 3.9z" />
-      <path d="M1 1v2.6A11.4 11.4 0 0 1 12.4 15H15A14 14 0 0 0 1 1z" />
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5 14 14" strokeLinecap="round" />
     </svg>
   );
 }
