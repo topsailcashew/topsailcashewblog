@@ -45,7 +45,7 @@ export default async function TagPage({ params }: { params: Params }) {
   if (feed.posts.length === 0) notFound();
 
   return (
-    // Same 3-column grid as the homepage, no black canvas (§7).
+    // Same 3-column grid as the homepage (§7).
     <div className="shell-wrap" id="content">
       <div className="page-head">
         <p className="label">Tagged</p>

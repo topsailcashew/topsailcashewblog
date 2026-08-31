@@ -1,17 +1,27 @@
+import { ReadingFooter, SiteNav } from "@/components/public/SiteChrome";
+
 /**
- * Shared by every public route. Deliberately thin: the black-canvas framing is
- * a homepage signature (Design.md §3), so the chrome lives one level down —
- * in `(reading)/layout.tsx` for reading pages, and in the homepage itself.
+ * Chrome for every public page, homepage included.
+ *
+ * Design.md §3 called for the homepage to float on a black canvas while
+ * reading pages sat on plain white. That framing has been dropped, so there is
+ * no longer anything to separate — one layout serves the whole public site.
  */
 export default function PublicLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <>
+    <div className="reading-shell">
       <a className="skip-link" href="#content">
         Skip to content
       </a>
-      {children}
-    </>
+      <div className="shell-wrap">
+        <SiteNav />
+      </div>
+      <main id="content">{children}</main>
+      <div className="shell-wrap">
+        <ReadingFooter />
+      </div>
+    </div>
   );
 }

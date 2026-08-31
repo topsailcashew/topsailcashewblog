@@ -32,15 +32,6 @@ export function SiteNav() {
   );
 }
 
-/** Credit line under the framed homepage. */
-export function CanvasCredit() {
-  return (
-    <p className="canvas-credit">
-      {siteConfig.name} — {siteConfig.description}
-    </p>
-  );
-}
-
 /** Footer for reading and admin pages. */
 export function ReadingFooter() {
   return (

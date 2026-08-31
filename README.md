@@ -670,11 +670,18 @@ There is no third colour for a true duotone to mix toward, so the more
 elaborate SVG-filter approach would produce the same pixels. If the palette
 ever gains a tinted shadow, that is the point to revisit it.
 
-### Framing
+### Framing — dropped
 
-The black canvas is homepage-only (§3). Reading pages sit in a
-`(reading)` route group with their own layout on plain white, so the framing
-cannot leak onto long-form text.
+Design.md §3 called for the homepage to float on a black canvas, with reading
+pages on plain white. **That framing has been removed**: the whole public site
+is one white page now.
+
+It was the one part of the spec that fought the rest. The masthead already
+carries the homepage on its own, and the frame put a hard border between the
+homepage and every other page for no reason a reader benefits from.
+
+With it gone the `(reading)` route group had nothing to separate — it held
+every page — so it was collapsed and one layout serves the whole public site.
 
 ### Where the reference screenshots override Design.md
 
@@ -930,8 +937,8 @@ and its `media` row in place — worth a sweep when the media library grows.
 src/
   app/
     (public)/layout.tsx             site chrome for every reading page
-    (public)/page.tsx               home feed, black-canvas framed
-    (public)/(reading)/layout.tsx   plain white chrome for reading pages
+    (public)/layout.tsx             nav + footer for every public page
+    (public)/page.tsx               home feed
     (public)/page/[page]/           older feed pages
     (public)/[slug]/page.tsx        the post
     (public)/tag/[tag]/page.tsx     posts by tag

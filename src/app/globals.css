@@ -17,7 +17,6 @@
   */
   --accent: #ff5a1f;
   --accent-ink: #c93f08;
-  --canvas: #0a0a0a;
   --selection: #ffe3d6;
   --ok: #1f7a4d;
   --danger: #b3261e;
@@ -327,35 +326,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .site-footer-plain a { color: inherit; text-decoration: none; }
 .site-footer-plain a:hover { color: var(--accent-ink); }
 
-/* --- homepage black canvas (§3) ------------------------------------------ */
-
-.canvas {
-  min-height: 100vh;
-  background: var(--canvas);
-  padding: clamp(0.75rem, 3vw, 2.5rem);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s5);
-}
-.canvas-page {
-  background: var(--bg);
-  width: 100%;
-  max-width: var(--shell);
-  margin: 0 auto;
-  padding: 0 var(--gutter) var(--s8);
-}
-.canvas-credit {
-  text-align: center;
-  color: #8f8f8f;
-  font-family: var(--sans);
-  font-size: var(--text-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding-bottom: var(--s2);
-}
-.canvas-credit a { color: inherit; text-decoration: none; }
-.canvas-credit a:hover { color: var(--accent); }
-
 /* ===========================================================================
    HOMEPAGE — hero, categories, grid (§5)
    ========================================================================= */
@@ -363,7 +333,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .hero {
   /* The measuring context the wordmark sizes itself against. */
   container-type: inline-size;
-  padding-block: var(--s6) var(--s5);
+  padding-block: var(--s7) var(--s5);
 }
 
 /*
