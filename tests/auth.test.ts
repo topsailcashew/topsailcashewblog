@@ -13,9 +13,16 @@ describe("route protection", () => {
       ["/admin", "GET"],
       ["/admin/posts/new", "GET"],
       ["/admin/posts/abc", "POST"],
+      ["/api/posts", "GET"],
       ["/api/posts", "POST"],
+      ["/api/posts/abc", "GET"],
       ["/api/posts/abc", "PATCH"],
       ["/api/posts/abc", "DELETE"],
+      ["/api/posts/abc/revisions", "GET"],
+      ["/api/posts/abc/preview", "POST"],
+      ["/api/pages", "GET"],
+      ["/api/pages", "POST"],
+      ["/api/pages/abc", "PATCH"],
       ["/api/media", "POST"],
       ["/api/media", "GET"],
       // Comment moderation and series management are admin-only.
@@ -43,11 +50,8 @@ describe("route protection", () => {
     assert.equal(isProtected("/api/comments/abc", "POST"), true);
   });
 
-  it("leaves reads, media files and the login flow open", () => {
+  it("leaves media files and the login flow open", () => {
     const open: [string, string][] = [
-      ["/api/posts", "GET"],
-      ["/api/posts/abc", "GET"],
-      ["/api/posts", "HEAD"],
       ["/admin/login", "GET"],
       ["/api/auth/login", "POST"],
       ["/api/auth/logout", "POST"],
@@ -55,6 +59,9 @@ describe("route protection", () => {
       ["/", "GET"],
       // The one public write: submitting a comment. It lands as pending.
       ["/api/comments", "POST"],
+      // A preview link is a capability of its own; the route reads the token,
+      // not a session.
+      ["/preview/some-token", "GET"],
     ];
     for (const [pathname, method] of open) {
       assert.equal(isProtected(pathname, method), false, `${method} ${pathname}`);

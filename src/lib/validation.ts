@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { COMMENT_STATUSES, POST_STATUSES } from "@/db/schema";
-import { isValidSlug } from "./slug";
+import { isValidSlug, RESERVED_SLUGS } from "./slug";
 
 /**
  * Wire format is snake_case to match the field names in the project spec
@@ -13,7 +13,11 @@ const slugSchema = z
   .trim()
   .min(1)
   .max(120)
-  .refine(isValidSlug, "Slug must be lowercase words separated by single hyphens");
+  .refine(isValidSlug, "Slug must be lowercase words separated by single hyphens")
+  .refine(
+    (value) => !RESERVED_SLUGS.has(value),
+    "That slug is used by a built-in route",
+  );
 
 const titleSchema = z.string().trim().min(1, "Title is required").max(500);
 const nullableText = z.string().nullable().optional();
@@ -56,6 +60,7 @@ export const createPostSchema = z.object({
   status: z.enum(POST_STATUSES).optional(),
   tags: tagsSchema,
   series_id: z.uuid().nullable().optional(),
+  published_at: z.iso.datetime().nullable().optional(),
 });
 
 export const updatePostSchema = z
@@ -69,6 +74,9 @@ export const updatePostSchema = z
     status: z.enum(POST_STATUSES).optional(),
     tags: tagsSchema,
     series_id: z.uuid().nullable().optional(),
+    /* A future value schedules the post; the public queries hide it until
+       the moment passes. */
+    published_at: z.iso.datetime().nullable().optional(),
   })
   .refine(
     (body) => Object.keys(body).length > 0,
@@ -96,6 +104,26 @@ export const updateSeriesSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().trim().max(1000).nullable().optional(),
     slug: slugSchema.optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, "Provide a field to update");
+
+/* --- pages -------------------------------------------------------------- */
+
+export const createPageSchema = z.object({
+  title: titleSchema,
+  slug: slugSchema.optional(),
+  content_json: contentJsonSchema,
+  content_html: nullableText,
+  status: z.enum(POST_STATUSES).optional(),
+});
+
+export const updatePageSchema = z
+  .object({
+    title: titleSchema.optional(),
+    slug: slugSchema.optional(),
+    content_json: contentJsonSchema,
+    content_html: nullableText,
+    status: z.enum(POST_STATUSES).optional(),
   })
   .refine((body) => Object.keys(body).length > 0, "Provide a field to update");
 
@@ -133,6 +161,8 @@ export const authorReplySchema = z.object({
   body: z.string().trim().min(1, "Write a reply").max(4000),
 });
 
+export type CreatePageInput = z.infer<typeof createPageSchema>;
+export type UpdatePageInput = z.infer<typeof updatePageSchema>;
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 export type UpdatePostInput = z.infer<typeof updatePostSchema>;
 export type ListPostsQuery = z.infer<typeof listPostsQuerySchema>;

@@ -124,6 +124,58 @@ export const media = pgTable("media", {
     .defaultNow(),
 });
 
+/**
+ * Point-in-time snapshots of a post, for recovery.
+ *
+ * Deliberately *not* written on every autosave — that is what makes WordPress
+ * revision tables enormous. See `src/lib/revisions.ts` for the rules: one
+ * snapshot per publish transition, at most one per hour while drafting, and
+ * only the last MAX_REVISIONS_PER_POST are kept.
+ *
+ * `content_html` is not stored: it is derived from `content_json`, so keeping
+ * it would roughly double the table for nothing.
+ */
+export const postRevisions = pgTable(
+  "post_revisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    excerpt: text("excerpt"),
+    contentJson: jsonb("content_json"),
+    /** Why the snapshot was taken, shown in the restore list. */
+    reason: text("reason").notNull().default("edit"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("post_revisions_post_created_idx").on(table.postId, table.createdAt.desc())],
+);
+
+/**
+ * Standalone pages — About, Contact and so on.
+ *
+ * A separate table rather than a `type` column on `posts`: pages carry no
+ * tags, series, comments or publication date, and adding a discriminator to
+ * posts would mean auditing every public query for a filter it could silently
+ * miss.
+ */
+export const pages = pgTable("pages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  contentJson: jsonb("content_json"),
+  contentHtml: text("content_html"),
+  status: text("status").notNull().default("draft").$type<PostStatus>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
 export const COMMENT_STATUSES = [
   "pending",
   "approved",
@@ -191,9 +243,20 @@ export const postTagsRelations = relations(postTags, ({ one }) => ({
   tag: one(tags, { fields: [postTags.tagId], references: [tags.id] }),
 }));
 
-export const schema = { posts, tags, postTags, media, series, comments };
+export const schema = {
+  posts,
+  tags,
+  postTags,
+  media,
+  series,
+  comments,
+  postRevisions,
+  pages,
+};
 
 export type SeriesRow = typeof series.$inferSelect;
+export type PageRow = typeof pages.$inferSelect;
+export type PostRevisionRow = typeof postRevisions.$inferSelect;
 export type CommentRow = typeof comments.$inferSelect;
 export type PostRow = typeof posts.$inferSelect;
 export type NewPostRow = typeof posts.$inferInsert;

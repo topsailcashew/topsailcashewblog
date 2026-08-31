@@ -7,7 +7,8 @@ import { absoluteUrl, siteConfig, siteUrl } from "@/lib/site";
  * call when a post is written. The hourly window is the safety net.
  */
 export const dynamic = "force-static";
-export const revalidate = 3600;
+/* Five-minute window so scheduled posts surface promptly — see app/(public)/page.tsx. */
+export const revalidate = 300;
 
 /** Most recent posts only — a feed reader has no use for the whole archive. */
 const FEED_LIMIT = 50;

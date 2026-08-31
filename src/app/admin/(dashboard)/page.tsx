@@ -50,8 +50,8 @@ export default async function AdminDashboard() {
             <div className="panel">
               <h2 className="label">Overview</h2>
               <div className="stat-grid">
-                <Stat label="Stories" value={postCounts.published} href="/admin/stories?status=published" />
-                <Stat label="Drafts" value={postCounts.draft} href="/admin/stories?status=draft" />
+                <Stat label="Articles" value={postCounts.published} href="/admin/articles?status=published" />
+                <Stat label="Drafts" value={postCounts.draft} href="/admin/articles?status=draft" />
                 <Stat label="Comments" value={commentCounts.approved} href="/admin/comments?status=approved" />
                 <Stat label="Pending" value={commentCounts.pending} href="/admin/comments" />
               </div>
@@ -61,7 +61,7 @@ export default async function AdminDashboard() {
           </div>
 
           <div className="panel">
-            <h2 className="label">Recent stories</h2>
+            <h2 className="label">Recent articles</h2>
             {posts.length === 0 ? (
               <p className="muted">
                 Nothing yet. <Link href="/admin/posts/new">Write the first one.</Link>

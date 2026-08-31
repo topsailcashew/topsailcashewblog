@@ -2,6 +2,22 @@ import Link from "next/link";
 import { siteConfig } from "@/lib/site";
 
 /**
+ * The primary nav.
+ *
+ * About, Newsletter and Contact are database-backed pages rather than
+ * hardcoded routes, so the copy behind them is editable from the admin. They
+ * are linked unconditionally: a link that appears only once its page exists
+ * would make the nav shift shape depending on the data, which is worse than a
+ * page the author has yet to fill in.
+ */
+const NAV_LINKS = [
+  { href: "/about", label: "About" },
+  { href: "/articles", label: "Articles" },
+  { href: "/newsletter", label: "Newsletter" },
+  { href: "/contact", label: "Contact" },
+] as const;
+
+/**
  * Nav bar, matching the reference screenshots.
  *
  * The wordmark is the site name set in serif, lowercase, as one word — it
@@ -16,8 +32,11 @@ export function SiteNav() {
           {siteConfig.name}
         </Link>
         <nav className="nav-links" aria-label="Primary">
-          <Link href="/">Home</Link>
-          <Link href="/stories">Stories</Link>
+          {NAV_LINKS.map((link) => (
+            <Link key={link.href} href={link.href}>
+              {link.label}
+            </Link>
+          ))}
           <Link href="/search" className="nav-search" aria-label="Search">
             <SearchIcon />
           </Link>
@@ -38,8 +57,11 @@ export function ReadingFooter() {
     <footer className="site-footer-plain">
       <span className="footer-mark">{siteConfig.name}</span>
       <nav className="footer-links" aria-label="Footer">
-        <Link href="/">Home</Link>
-        <Link href="/stories">Stories</Link>
+        {NAV_LINKS.map((link) => (
+          <Link key={link.href} href={link.href}>
+            {link.label}
+          </Link>
+        ))}
         <a href="/rss.xml">RSS</a>
       </nav>
       <span className="footer-credit">

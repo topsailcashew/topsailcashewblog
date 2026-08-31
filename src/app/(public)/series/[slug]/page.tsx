@@ -5,7 +5,8 @@ import { PostGrid } from "@/components/public/PostGrid";
 import { getSeriesPosts, listPublishedSeriesSlugs } from "@/lib/public-posts";
 import { getSeriesBySlug } from "@/lib/series";
 
-export const revalidate = 3600;
+/* Five-minute window so scheduled posts surface promptly — see app/(public)/page.tsx. */
+export const revalidate = 300;
 
 type Params = Promise<{ slug: string }>;
 

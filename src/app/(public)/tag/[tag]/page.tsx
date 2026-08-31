@@ -4,7 +4,8 @@ import { getDb } from "@/db/client";
 import { PostGrid } from "@/components/public/PostGrid";
 import { getFeed, getTagName, listPublishedTagSlugs } from "@/lib/public-posts";
 
-export const revalidate = 3600;
+/* Five-minute window so scheduled posts surface promptly — see app/(public)/page.tsx. */
+export const revalidate = 300;
 
 type Params = Promise<{ tag: string }>;
 

@@ -13,7 +13,7 @@ function parseStatus(value: string | undefined): PostStatus | undefined {
     : undefined;
 }
 
-export default async function AdminStoriesPage({
+export default async function AdminArticlesPage({
   searchParams,
 }: {
   searchParams: SearchParams;
@@ -32,7 +32,7 @@ export default async function AdminStoriesPage({
   return (
     <main className="admin-main">
       <div className="admin-head">
-        <h1 className="admin-title">Stories</h1>
+        <h1 className="admin-title">Articles</h1>
         <div className="row filter-row">
           <FilterLink current={filter} value={undefined}>
             All
@@ -65,16 +65,30 @@ export default async function AdminStoriesPage({
               <Link href={`/admin/posts/${post.id}`} className="post-row-title">
                 {post.title}
               </Link>
-              <span className={`status--${post.status}`}>{post.status}</span>
+              <span className={`status--${post.status}`}>
+                {isScheduled(post) ? "scheduled" : post.status}
+              </span>
             </div>
             <p className="meta">
-              /{post.slug} · updated {new Date(post.updated_at).toLocaleString()}
+              /{post.slug} ·{" "}
+              {isScheduled(post)
+                ? `goes live ${new Date(post.published_at!).toLocaleString()}`
+                : `updated ${new Date(post.updated_at).toLocaleString()}`}
               {post.tags.length > 0 && ` · ${post.tags.map((tag) => tag.name).join(", ")}`}
             </p>
           </li>
         ))}
       </ul>
     </main>
+  );
+}
+
+/** Published, but dated forward — not yet visible to a reader. */
+function isScheduled(post: SerializedPost): boolean {
+  return (
+    post.status === "published" &&
+    post.published_at !== null &&
+    new Date(post.published_at).getTime() > Date.now()
   );
 }
 
@@ -90,7 +104,7 @@ function FilterLink({
   const active = current === value;
   return (
     <Link
-      href={value ? `/admin/stories?status=${value}` : "/admin/stories"}
+      href={value ? `/admin/articles?status=${value}` : "/admin/articles"}
       className={active ? "tag-pill is-active" : "tag-pill"}
       aria-current={active ? "page" : undefined}
     >

@@ -15,6 +15,13 @@
       "when": 1788097084318,
       "tag": "0001_phase4_series_search_comments",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788155323206,
+      "tag": "0002_revisions_and_pages",
+      "breakpoints": true
     }
   ]
 }

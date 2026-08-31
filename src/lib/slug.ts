@@ -1,6 +1,6 @@
 import { and, eq, like, ne, or } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
-import { posts } from "@/db/schema";
+import { pages, posts } from "@/db/schema";
 
 /** Longest slug stem we will generate before a uniqueness suffix is added. */
 const MAX_SLUG_LENGTH = 80;
@@ -26,11 +26,36 @@ export function slugify(input: string): string {
 }
 
 /**
+ * Slugs the router owns. A post or page taking one of these would be shadowed
+ * by the real route and never render.
+ */
+export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
+  "admin",
+  "api",
+  "articles",
+  "media",
+  "og",
+  "page",
+  "preview",
+  "robots.txt",
+  "rss.xml",
+  "search",
+  "series",
+  "sitemap.xml",
+  "tag",
+]);
+
+/**
  * Pick the first free slug in the series `base`, `base-2`, `base-3`, ...
  *
- * `excludeId` lets a post keep its own slug on update instead of colliding
+ * Posts and pages are checked together. They share the `/[slug]` route, and
+ * that route resolves posts first — so a post allowed to take a page's slug
+ * would not collide at the database level, it would just make the page
+ * unreachable. Treating the two namespaces as one keeps that from happening.
+ *
+ * `excludeId` lets a row keep its own slug on update instead of colliding
  * with itself. This is a best-effort check: the unique index is the real
- * guarantee, and callers retry on violation (see `insertWithUniqueSlug`).
+ * guarantee, and callers retry on violation (see `withUniqueSlug`).
  */
 export async function findAvailableSlug(
   db: BlogDatabase,
@@ -38,18 +63,26 @@ export async function findAvailableSlug(
   excludeId?: string,
 ): Promise<string> {
   // `base` is already slugified, so it contains no LIKE metacharacters.
-  const collisionFilter = or(
-    eq(posts.slug, base),
-    like(posts.slug, `${base}-%`),
-  );
+  const postFilter = or(eq(posts.slug, base), like(posts.slug, `${base}-%`));
+  const pageFilter = or(eq(pages.slug, base), like(pages.slug, `${base}-%`));
 
-  const rows = await db
-    .select({ slug: posts.slug })
-    .from(posts)
-    .where(excludeId ? and(collisionFilter, ne(posts.id, excludeId)) : collisionFilter);
+  const [postRows, pageRows] = await Promise.all([
+    db
+      .select({ slug: posts.slug })
+      .from(posts)
+      .where(excludeId ? and(postFilter, ne(posts.id, excludeId)) : postFilter),
+    db
+      .select({ slug: pages.slug })
+      .from(pages)
+      .where(excludeId ? and(pageFilter, ne(pages.id, excludeId)) : pageFilter),
+  ]);
 
-  return firstFreeSlug(base, new Set(rows.map((row) => row.slug)));
+  const taken = new Set([...postRows, ...pageRows].map((row) => row.slug));
+  // A derived slug that lands on a router-owned name is bumped to `-2`.
+  if (RESERVED_SLUGS.has(base)) taken.add(base);
+  return firstFreeSlug(base, taken);
 }
+
 
 /** `base`, else the first free `base-2`, `base-3`, … Shared with series slugs. */
 export function firstFreeSlug(base: string, taken: ReadonlySet<string>): string {

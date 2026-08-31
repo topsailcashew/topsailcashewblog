@@ -14,13 +14,24 @@ export type AuthResult =
   | { ok: true; subject: string }
   | { ok: false; status: 401 | 403 | 500; message: string };
 
-/** Methods that only read. Everything else is treated as a mutation. */
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+/*
+  `GET /api/posts` used to be open, on the reasoning that "reads stay open so
+  the public site can use them". That stopped being true once the public pages
+  were built: they are server components reading the database directly, and
+  every caller of this API is in src/components/admin. Meanwhile the open read
+  returned drafts — `?status=draft` listed every unpublished post in full to
+  anyone who asked, which is the exact thing the public routes go out of their
+  way to 404. Draft sharing goes through a signed preview link instead
+  (src/lib/preview.ts).
+
+  With that gone, nothing under /api is open to a read any more — so there is
+  no longer a safe-method exemption anywhere in this file. Every API route is
+  gated for every method except the two named in isPublic below.
+*/
 
 /**
  * Routes that stay reachable without a session:
  *   - the login page and the endpoints that grant/clear a session
- *   - GET /api/posts — reads stay open so the public site can use them
  *   - /media/* — uploaded images must load in a browser without a cookie
  *   - POST /api/comments *exactly* — the one public write in the app. Readers
  *     submit without an account; every submission lands as `pending` and is
@@ -31,13 +42,16 @@ function isPublic(pathname: string, method: string): boolean {
   if (pathname === "/admin/login") return true;
   if (pathname === "/api/auth/login" || pathname === "/api/auth/logout") return true;
   if (pathname === "/media" || pathname.startsWith("/media/")) return true;
-  if (isPostsApi(pathname) && SAFE_METHODS.has(method)) return true;
   if (pathname === "/api/comments" && method === "POST") return true;
   return false;
 }
 
 function isPostsApi(pathname: string): boolean {
   return pathname === "/api/posts" || pathname.startsWith("/api/posts/");
+}
+
+function isPagesApi(pathname: string): boolean {
+  return pathname === "/api/pages" || pathname.startsWith("/api/pages/");
 }
 
 function isAdminRoute(pathname: string): boolean {
@@ -67,6 +81,7 @@ export function isProtected(pathname: string, method: string): boolean {
   return (
     isAdminRoute(pathname) ||
     isPostsApi(pathname) ||
+    isPagesApi(pathname) ||
     isMediaApi(pathname) ||
     isCommentsApi(pathname) ||
     isSeriesApi(pathname)

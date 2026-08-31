@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { siteConfig } from "@/lib/site";
+import { Analytics } from "@/components/public/Analytics";
+import { JsonLd } from "@/components/public/JsonLd";
+import { siteConfig, siteUrl } from "@/lib/site";
+import { websiteJsonLd } from "@/lib/structured-data";
 import "./globals.css";
 
 /**
@@ -53,6 +56,10 @@ const bodyFace = localFont({
 export const metadata: Metadata = {
   title: { default: siteConfig.name, template: `%s — ${siteConfig.name}` },
   description: siteConfig.description,
+  // Lets every page declare its canonical as a path; Next resolves them
+  // against this. Omitted when unset, since a relative canonical is worse
+  // than none.
+  metadataBase: siteUrl() ? new URL(siteUrl()) : undefined,
   alternates: { types: { "application/rss+xml": "/rss.xml" } },
 };
 
@@ -64,7 +71,11 @@ export default function RootLayout({
       lang={siteConfig.language}
       className={`${displayFace.variable} ${uiFace.variable} ${bodyFace.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <JsonLd json={websiteJsonLd()} />
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }

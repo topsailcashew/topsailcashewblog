@@ -19,10 +19,11 @@ export default function DashboardLayout({
           </Link>
           <span className="nav-links">
             <Link href="/admin">Home</Link>
-            <Link href="/admin/stories">Stories</Link>
+            <Link href="/admin/articles">Articles</Link>
             <Link href="/admin/posts/new">New Post</Link>
             <Link href="/admin/comments">Comments</Link>
             <Link href="/admin/series">Series</Link>
+            <Link href="/admin/pages">Pages</Link>
           </span>
         </div>
         <div className="nav-author">

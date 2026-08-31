@@ -23,7 +23,7 @@ export async function revalidatePublicPages(
   } = {},
 ): Promise<void> {
   try {
-    const paths = new Set<string>(["/", "/rss.xml"]);
+    const paths = new Set<string>(["/", "/articles", "/rss.xml", "/sitemap.xml"]);
 
     // Both the old and new slug, so a rename leaves nothing behind at the
     // previous URL.

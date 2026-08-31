@@ -10,6 +10,8 @@ import type { SerializedSeries } from "@/lib/series";
 import { useAutosave } from "@/lib/use-autosave";
 import { isImageFile, uploadImage } from "@/lib/upload-client";
 import { CoverImagePicker } from "./CoverImagePicker";
+import { PublishPanel } from "./PublishPanel";
+import { RevisionPanel } from "./RevisionPanel";
 import { SaveStatus } from "./SaveStatus";
 import { TagInput } from "./TagInput";
 
@@ -220,6 +222,60 @@ export function PostEditor({
     router.refresh();
   }, [flush, router, status]);
 
+  /**
+   * Writes the publication date on its own.
+   *
+   * Deliberately not part of the autosaved draft: `published_at` is the field
+   * the public feed sorts and filters on, so it should move when the writer
+   * changes it, not on the next ten-second tick.
+   */
+  const setSchedule = useCallback(
+    async (isoOrNull: string | null) => {
+      const id = postIdRef.current;
+      if (!id) {
+        setActionError("Save the post before scheduling it.");
+        return;
+      }
+      setActionError(null);
+
+      const response = await fetch(`/api/posts/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ published_at: isoOrNull }),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        setActionError(body.error ?? "Could not set the publish date");
+        return;
+      }
+
+      const { post } = (await response.json()) as { post: SerializedPost };
+      setPublishedAt(post.published_at);
+      router.refresh();
+    },
+    [router],
+  );
+
+  /**
+   * A restore rewrites the row underneath the open editor, so the editor has
+   * to be reloaded from the server rather than left showing the old text.
+   */
+  const reloadAfterRestore = useCallback(async () => {
+    const id = postIdRef.current;
+    if (!id) return;
+
+    const response = await fetch(`/api/posts/${id}`);
+    if (!response.ok) {
+      setActionError("Restored, but the editor could not reload — refresh the page.");
+      return;
+    }
+    const { post } = (await response.json()) as { post: SerializedPost };
+    const restored = draftFromPost(post);
+    setDraft(restored);
+    editorRef.current?.commands.setContent(restored.contentJson);
+    router.refresh();
+  }, [router]);
+
   const remove = useCallback(async () => {
     const id = postIdRef.current;
     if (!id) return;
@@ -350,11 +406,14 @@ export function PostEditor({
           />
         </div>
 
-        {publishedAt && (
-          <p className="muted">
-            Published {new Date(publishedAt).toLocaleString()}
-          </p>
-        )}
+        <PublishPanel
+          postId={postId}
+          status={status}
+          publishedAt={publishedAt}
+          onScheduleChange={setSchedule}
+        />
+
+        <RevisionPanel postId={postId} onRestored={reloadAfterRestore} />
       </section>
     </div>
   );

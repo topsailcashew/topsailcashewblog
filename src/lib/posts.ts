@@ -3,6 +3,7 @@ import type { BlogDatabase } from "@/db/client";
 import { posts, type PostRow, type PostStatus } from "@/db/schema";
 import { ApiError, notFound } from "./http";
 import { slugify, withUniqueSlug } from "./slug";
+import { snapshotPost, type RevisionReason } from "./revisions";
 import { getTagsForPosts, syncPostTags, type TagSummary } from "./tags";
 import type { CreatePostInput, ListPostsQuery, UpdatePostInput } from "./validation";
 
@@ -71,7 +72,11 @@ export async function createPost(
         coverImageUrl: emptyToNull(input.cover_image_url),
         status,
         seriesId: input.series_id ?? null,
-        publishedAt: status === "published" ? new Date() : null,
+        publishedAt: input.published_at
+          ? new Date(input.published_at)
+          : status === "published"
+            ? new Date()
+            : null,
       })
       .returning();
     return created;
@@ -130,6 +135,23 @@ export async function updatePost(
       patch.publishedAt = new Date();
     }
   }
+  // An explicit date wins, and a future one schedules the post.
+  if (input.published_at !== undefined) {
+    patch.publishedAt = input.published_at ? new Date(input.published_at) : null;
+  }
+
+  /*
+    Snapshot the post as it stands *before* the update lands. Publish
+    transitions always snapshot; ordinary edits are throttled inside
+    snapshotPost so ten-second autosaves do not fill the table.
+  */
+  const reason: RevisionReason =
+    input.status !== undefined && input.status !== existing.status
+      ? input.status === "published"
+        ? "publish"
+        : "unpublish"
+      : "edit";
+  await snapshotPost(db, id, reason);
 
   // Titles can be edited freely without breaking a permalink — the slug only
   // changes when it is passed explicitly.

@@ -50,11 +50,12 @@ export async function teardownDatabase(): Promise<void> {
 /**
  * Every table, so the suite is idempotent — leaving `series` behind made it
  * pass on a fresh database and fail on the second run, when slugs collided
- * with rows from the previous one.
+ * with rows from the previous one. `pages` is listed for the same reason: it
+ * has no foreign key into posts, so a cascade never reaches it.
  */
 export async function resetTables(): Promise<void> {
   await db().execute(
-    sql`truncate table comments, post_tags, posts, tags, media, series restart identity cascade`,
+    sql`truncate table comments, post_tags, post_revisions, posts, tags, media, series, pages restart identity cascade`,
   );
 }
 

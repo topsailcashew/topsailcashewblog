@@ -343,6 +343,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 */
 .wordmark--hero {
   display: block;
+  position: relative;
   font-family: var(--display);
   font-weight: 400;
   text-transform: uppercase;
@@ -352,6 +353,59 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   font-size: clamp(2.5rem, 15vw, 14rem);
   font-size: 17.7cqw;
   margin: 0;
+
+  /* Radius of the lit area, and where JS last saw the cursor. */
+  --spot: clamp(90px, 13cqw, 300px);
+  --mx: 50%;
+  --my: 50%;
+}
+
+/*
+  Two stacked copies of the word. The accent copy sits exactly on top of the
+  black one and is masked to a soft circle at the cursor, so the letters under
+  the pointer read orange and the rest stays black. Masking the whole layer
+  rather than colouring individual letters means the boundary can fall
+  mid-glyph, which is the point — the effect follows the cursor, not the
+  letter grid.
+*/
+.wordmark-face {
+  display: block;
+}
+
+.wordmark-face--lit {
+  position: absolute;
+  inset: 0;
+  color: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
+  -webkit-mask-image: radial-gradient(
+    circle var(--spot) at var(--mx) var(--my),
+    #000 0%,
+    #000 42%,
+    transparent 78%
+  );
+  mask-image: radial-gradient(
+    circle var(--spot) at var(--mx) var(--my),
+    #000 0%,
+    #000 42%,
+    transparent 78%
+  );
+}
+
+.wordmark--hero[data-lit="on"] .wordmark-face--lit {
+  opacity: 1;
+}
+
+/*
+  Touch devices have no hovering cursor to follow, and a spotlight chasing the
+  pointer is exactly the kind of movement `prefers-reduced-motion` is asking us
+  not to make. Both fall back to the plain black wordmark.
+*/
+@media (hover: none), (prefers-reduced-motion: reduce) {
+  .wordmark--hero[data-lit="on"] .wordmark-face--lit {
+    opacity: 0;
+  }
 }
 
 .categories {
@@ -511,6 +565,30 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 @media (max-width: 62rem) { .article-layout { grid-template-columns: minmax(0, 1fr); gap: var(--s6); } }
 
 .article { max-width: var(--measure); margin-inline: auto; min-width: 0; }
+
+/*
+  Standalone pages — About, Newsletter, Contact. Same reading column as a post,
+  centred rather than offset, since there is no Read Next rail beside them.
+*/
+.page-layout { padding-top: var(--s6); }
+.page-layout .article { margin-inline: auto; }
+.article--page { margin-inline: auto; }
+
+/* Banner on a draft preview. Deliberately loud — this page is not public. */
+.preview-banner {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  max-width: var(--measure);
+  margin: 0 auto var(--s6);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--fg);
+  background: var(--accent);
+  color: #0a0a0a;
+  font-size: var(--text-sm);
+}
+.preview-banner .label { color: inherit; }
 
 /* Contained, not full-bleed — §6 left this open and the reference settles it. */
 .article-cover { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; margin-bottom: var(--s6); }
@@ -756,6 +834,61 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .story-table a:hover { color: var(--accent-ink); text-decoration: underline; }
 .status--published { color: var(--ok); }
 .status--draft { color: var(--fg-muted); }
+
+/* --- editor sidebar: publication + history -------------------------------- */
+
+.hint {
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+  line-height: 1.5;
+  margin-top: var(--s2);
+}
+
+.publish-scheduled {
+  font-size: var(--text-xs);
+  color: var(--accent-ink);
+  margin-bottom: var(--s2);
+}
+
+.publish-date { display: block; }
+
+.preview-link {
+  display: block;
+  width: 100%;
+  margin-top: var(--s2);
+  font-size: var(--text-xs);
+}
+
+.revision-panel { margin-top: var(--s5); }
+
+.revision-list {
+  list-style: none;
+  margin-top: var(--s3);
+  border-top: 1px solid var(--border);
+}
+.revision-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s1) var(--s3);
+  align-items: center;
+  padding-block: var(--s3);
+  border-bottom: 1px solid var(--border);
+}
+.revision-meta {
+  grid-column: 1;
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+}
+.revision-reason { color: var(--fg-muted); }
+.revision-title {
+  grid-column: 1;
+  font-size: var(--text-sm);
+  color: var(--fg);
+}
+.revision-list .btn { grid-column: 2; grid-row: 1 / span 2; }
 
 .row-actions { display: inline-flex; gap: var(--s2); justify-content: flex-end; }
 

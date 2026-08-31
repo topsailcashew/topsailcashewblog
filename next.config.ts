@@ -11,6 +11,14 @@ const nextConfig: NextConfig = {
     // that actually fires.
     proxyClientMaxBodySize: MAX_UPLOAD_BYTES + 2 * 1024 * 1024,
   },
+
+  async redirects() {
+    return [
+      // The archive was /stories before the nav was reworked. Permanent, so
+      // any link already in the wild keeps its search ranking.
+      { source: "/stories", destination: "/articles", permanent: true },
+    ];
+  },
 };
 
 // Gives `next dev` the same Cloudflare bindings the Worker gets (R2, etc.) by

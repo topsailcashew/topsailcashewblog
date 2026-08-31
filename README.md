@@ -24,6 +24,7 @@ A single-user, Medium-style publishing platform.
 npm install
 cp .env.example .env.local     # Neon URL, admin password, session secret
 npm run db:migrate
+npm run db:seed-pages          # About / Newsletter / Contact, once
 npx wrangler r2 bucket create topsailcashew-blog-media          # once
 npx wrangler r2 bucket create topsailcashew-blog-media-preview  # once
 npm run dev
@@ -49,6 +50,7 @@ uploads and the page cache work before any of them exist.
 | `NEXT_PUBLIC_SITE_URL` | for RSS | public site | Absolute origin, e.g. `https://blog.example.com`. **Inlined at build time**, so it must be set wherever you run `npm run cf:deploy` — not as a Worker variable. Without it, feed links and images are relative and will not resolve in a reader. |
 | `NEXT_PUBLIC_SITE_NAME` | no | public site | Header and feed title. Defaults to "Topsail Cashew". |
 | `NEXT_PUBLIC_SITE_DESCRIPTION` | no | public site | Tagline under the title and the feed description. |
+| `NEXT_PUBLIC_CF_ANALYTICS_TOKEN` | no | public site | Cloudflare Web Analytics site token. When set, the beacon script is added to every page; when unset, no analytics code is emitted at all. Inlined at build time like the other `NEXT_PUBLIC_*` values. |
 | `COMMENT_RATE_LIMIT` | no | comments | Submissions allowed from one address per hour. Defaults to **5**. |
 | `ADMIN_EMAIL` | no | comments | Recorded against replies you write from the moderation queue. Cosmetic; never shown publicly. |
 | `TEST_DATABASE_URL` | tests only | `npm test` | A scratch database. **The suite truncates every table**, so never point this at real data. Falls back to `DATABASE_URL` if unset. |
@@ -127,6 +129,9 @@ curl -X POST localhost:3000/api/posts \
 
 ### `GET /api/posts`
 
+**Admin only**, like every other route under `/api/posts` — see
+[Auth](#auth) for why this stopped being public.
+
 `?status=draft|published` filters; `?limit=` (default 50, max 100) and
 `?offset=` paginate. Ordered by `published_at`, falling back to `created_at`,
 newest first.
@@ -146,7 +151,29 @@ touched; passing `null` clears a nullable field.
 
 ### `DELETE /api/posts/:id`
 
-→ `204` (tag links go with it) · `404` unknown
+→ `204` (tag links and revisions go with it) · `404` unknown
+
+### `GET /api/posts/:id/revisions`
+
+→ `200 { "revisions": [ { id, title, excerpt, reason, created_at } ] }`,
+newest first. Bodies are not included; the list is for choosing one.
+
+### `POST /api/posts/:id/revisions`
+
+`{ "revision_id": "<uuid>" }` restores that snapshot over the live post,
+snapshotting the current text first. A revision belonging to a different post
+is a `404`, not a cross-post write.
+
+→ `200 { "post": { … } }` · `404` unknown post or revision
+
+### `POST /api/posts/:id/preview`
+
+→ `200 { "url": "https://…/preview/<token>", "expires_in": 604800 }`
+
+### `GET|POST /api/pages`, `GET|PATCH|DELETE /api/pages/:id`
+
+Same shapes as the post routes, minus tags, series, cover and dates. All admin
+only.
 
 ### `POST /api/auth/login`
 
@@ -198,11 +225,93 @@ insert, the write retries against the next free one.
 explicitly to move a post. A manual slug still goes through the uniqueness
 check, so overriding to a taken slug yields `taken-2` rather than an error.
 
-### Publishing
+### Publishing and scheduling
 
 `published_at` is stamped the first time a post is published, and **preserved**
 when it is unpublished — re-publishing does not silently move a post to the top
-of the feed. Backdating is not exposed by the API yet.
+of the feed.
+
+The date is also settable directly, through `published_at` on create and
+`PATCH`, or the date field in the editor sidebar. Backdating works; so does
+dating forward, which is how scheduling works here:
+
+- Every public read filters on `status = 'published' AND published_at <= now()`
+  (one predicate, in `src/lib/public-posts.ts`). A post dated forward exists,
+  is editable, and shows as **scheduled** in the admin, but the feed, its own
+  URL, RSS, search, the sitemap and `generateStaticParams` all treat it as
+  absent.
+- **There is no cron job.** OpenNext's generated Worker exports only `fetch`,
+  and it is regenerated on every build, so a `scheduled` handler would mean
+  wrapping its entry point — fragile for what a `where` clause already does.
+- The cost of having no cron is latency, not correctness. Nothing fires at the
+  scheduled moment, so the post appears when a cached page next refreshes.
+  Every list page, the feed, the sitemap **and post pages themselves** use
+  `revalidate = 300`, which bounds that to five minutes.
+- Post pages share the short window for a specific reason: until its time
+  arrives, a scheduled post's URL returns a 404, and that 404 caches like any
+  other response. Whoever visits early — the author, checking their own link —
+  would otherwise pin it there for the length of the window. Opting that one
+  render out of the cache is not possible: calling a dynamic API from a route
+  that declares `revalidate` is an error, not a fallback.
+
+A post published with **no** date set is not visible either — `null <= now()`
+is `NULL`, not true. The editor shows the empty field, so this is visible
+rather than mysterious.
+
+### Revisions
+
+Snapshots live in `post_revisions` and hold `title`, `excerpt` and
+`content_json` only. `content_html` is not stored: it is derived from the JSON
+(`src/lib/tiptap-html.ts`), and keeping both would roughly double the size of
+every row for no new information.
+
+The rules that keep the table small — all in `src/lib/revisions.ts`:
+
+- **Not every autosave.** The editor saves every ten seconds; snapshotting each
+  one is what makes WordPress revision tables enormous. An ordinary edit
+  snapshots at most **once an hour**.
+- **Always on a publish or unpublish**, regardless of that throttle — those are
+  the moments worth returning to.
+- **Never a duplicate.** If the text is identical to the newest snapshot,
+  nothing is written, whatever the reason. The list tracks versions of the
+  text, not a change log.
+- **Capped at `MAX_REVISIONS_PER_POST` (20)**, pruned on write. Pruning deletes
+  by id rather than "older than the oldest kept timestamp", because `now()` is
+  fixed for a whole transaction and two snapshots can share a `created_at`.
+
+Restoring snapshots the current text first, so a restore is itself undoable.
+
+### Draft preview links
+
+`POST /api/posts/:id/preview` (admin only) mints a signed, expiring URL at
+`/preview/<token>` that renders a draft to anyone holding it. The token carries
+one post id and an expiry, signed with `SESSION_SECRET` — so rotating that
+secret invalidates every outstanding link.
+
+Two details worth keeping:
+
+- The signed message is **domain-separated** from the session cookie
+  (`preview:` prefix), so neither token can ever be replayed as the other even
+  though both use the same key.
+- It is a **separate route**, not `/[slug]?preview=…`. Reading a search
+  parameter on the post page would make it dynamic for every visitor and cost
+  the whole site its static rendering; here the dynamic rendering is confined
+  to a route nobody reaches without a token.
+
+The preview page sets `noindex, nofollow, nocache`, and `/preview/` is
+disallowed in `robots.txt`.
+
+### Pages
+
+About, Newsletter and Contact are rows in `pages`, not hardcoded routes, so the
+copy is editable at `/admin/pages` without a deploy. `npm run db:seed-pages`
+creates the three the nav links to, with placeholder text; it never touches a
+page that already exists, so it is safe to re-run.
+
+They render through `/[slug]`, which resolves a **post first** and falls back to
+a page. To stop a post from silently shadowing a page, `findAvailableSlug`
+treats the two tables as one namespace, and `RESERVED_SLUGS` keeps both off the
+names the router owns (`/search`, `/tag`, `/admin`, …).
 
 ### Cover image URLs
 
@@ -338,7 +447,7 @@ createdb blog_test
 TEST_DATABASE_URL=postgresql://localhost/blog_test npm test
 ```
 
-107 tests run the real route handlers against a real Postgres — the suite
+139 tests run the real route handlers against a real Postgres — the suite
 migrates the database, then truncates between tests. There are no mocks of the
 code under test: `setDbForTesting` in [`src/db/client.ts`](src/db/client.ts)
 swaps the Neon handle for a node-postgres one, and the R2 binding is a small
@@ -362,11 +471,35 @@ numbered by publication date and unaffected by a draft in the middle, that
 deleting a series frees its posts rather than removing them, and that search
 ranks a title match above a body match and never returns a draft.
 
+Later work adds: that a post dated forward is hidden from the feed, its own
+URL, RSS, search and the pre-render list, and appears once its time passes with
+no further write; that an autosave storm produces one revision rather than one
+per save, that a publish always snapshots but an identical snapshot never
+does, that pruning holds the cap, and that restoring a revision belonging to a
+different post is a 404; that a preview token round-trips, and that a tampered,
+expired or foreign-signed one grants nothing — including that a session cookie
+and a preview token cannot be replayed as each other; that a page and a post
+cannot take each other's slug; and that every read under `/api/posts` is now
+gated.
+
 [`tests/neon-http.test.ts`](tests/neon-http.test.ts) additionally runs the same
 repository code through the **actual Neon HTTP driver** the Worker deploys
 with, using a small protocol shim in front of local Postgres. That covers the
 places the two drivers genuinely differ — array parameter encoding, the
 `db.execute` result shape, and how SQLSTATE codes are nested inside errors.
+
+To drive the **built Worker** against a local Postgres — which is how the
+scheduling, preview and SEO routes were checked — run the same shim as a
+standalone server and point the Neon driver at it:
+
+```bash
+SHIM_TARGET=postgres://localhost/blog_dev npx tsx scripts/dev-shim.ts
+```
+
+Then set `NEON_FETCH_ENDPOINT=http://127.0.0.1:55444/sql` in `.env.local`,
+build, and run `npx wrangler dev`. Use a **separate** database from
+`TEST_DATABASE_URL`: `npm test` truncates every table, and will wipe your
+sample content out from under a running server.
 
 ```bash
 npm run typecheck
@@ -455,11 +588,32 @@ To protect something new, add it to `isProtected` — not to the handler.
 | Route | Gated |
 | --- | --- |
 | `/admin/*` | every method |
-| `/api/posts`, `/api/posts/:id` | `POST` / `PATCH` / `DELETE` only |
-| `/api/media` | every method |
-| `GET /api/posts`, `GET /api/posts/:id` | open — Phase 3's public pages read through them |
+| `/api/posts/*`, `/api/pages/*` | every method, reads included |
+| `/api/media`, `/api/series/*` | every method |
+| `/api/comments/*` | every method **except** `POST /api/comments` |
+| `POST /api/comments` | open — the one public write; lands as `pending` |
 | `/media/*` | open — images must load in a browser without a cookie |
+| `/preview/<token>` | open — the signed token *is* the credential |
 | `/admin/login`, `/api/auth/*` | open |
+
+Nothing under `/api` is open to a read any more, so there is no safe-method
+exemption anywhere in `auth.ts`.
+
+#### `GET /api/posts` used to be public. It should not have been.
+
+The original reasoning was "reads stay open so the public site can use them".
+That stopped being true once the public pages were built: they are server
+components reading the database directly, and every remaining caller of this
+API is in `src/components/admin`.
+
+Meanwhile the open read returned drafts. `GET /api/posts?status=draft` listed
+every unpublished post **in full** to anyone who asked — no id to guess — which
+is the exact thing `/[slug]` goes out of its way to 404. It also made the
+signed preview link pointless: there is no value in a capability token for
+reading a draft if the plain list hands drafts out.
+
+It is now gated like everything else, and sharing a draft goes through
+[a preview link](#draft-preview-links).
 
 Page routes redirect to `/admin/login?next=…`; API routes get a JSON `401`. The
 `next` parameter is validated, so a crafted link cannot bounce you off-site
@@ -727,6 +881,68 @@ Primary buttons are `--fg` with the orange on hover.
 - **The admin was not restyled**, but it inherits the tokens, so it now renders
   in the neutral black/white/grey rather than the old warm palette. No admin
   markup or layout was touched.
+
+### The masthead spotlight
+
+Hovering the hero wordmark turns the letters under the cursor orange, with a
+soft falloff into black either side.
+
+It is two stacked copies of the word: black underneath, `--accent` on top,
+masked to a radial gradient centred on the pointer. Masking the whole layer
+rather than colouring individual letters is deliberate — the boundary can then
+fall mid-glyph, so the light follows the cursor rather than snapping to the
+letter grid.
+
+- Only `--mx`/`--my` change on pointer move, so it is a paint on one composited
+  layer, not a layout. Updates are coalesced into a `requestAnimationFrame`.
+- **Touch and pen are ignored** (`pointerType !== "mouse"`), or a tap would
+  light the mark and leave it lit with no pointer to move away.
+- `@media (hover: none), (prefers-reduced-motion: reduce)` switches it off
+  entirely. A spotlight chasing the cursor is exactly the movement that query
+  is asking about.
+- Without JavaScript, `--mx`/`--my` are never set, the accent layer stays at
+  zero opacity, and what is left is the plain black wordmark.
+- The heading carries an explicit `aria-label`. The word is in the DOM twice,
+  and `aria-hidden` on the duplicate was **not** enough — the computed name came
+  out as `topsailcashewtopsailcashew`, which is what a screen reader would have
+  read aloud. Verified in the accessibility tree, not assumed.
+
+---
+
+## SEO and analytics
+
+`sitemap.xml` and `robots.txt` are generated by Next's metadata routes
+(`src/app/sitemap.ts`, `src/app/robots.ts`), so they are real cached responses
+rather than static files that go stale. The sitemap lists the homepage, the
+archive, every published post, every page, every series and every tag — read
+through the same time-aware predicate as everything else, so a scheduled post
+is absent until it is live.
+
+Two details that would be easy to get wrong:
+
+- `robots.txt` **omits** the `Sitemap:` line when `NEXT_PUBLIC_SITE_URL` is
+  unset. A relative sitemap URL is invalid, and crawlers discard the whole file
+  rather than the one bad line.
+- The sitemap catches its own database errors and degrades to a
+  homepage-only document. A `500` here teaches crawlers the file is broken; a
+  short sitemap is recoverable on the next revalidate.
+- `Disallow` covers `/admin`, `/api/`, `/preview/` and `/search`. None of that
+  is what keeps them private — the first two are behind a session — it keeps
+  them out of the index and stops crawlers spending the request budget on
+  pages that only return `401`.
+
+JSON-LD is built in `src/lib/structured-data.ts` and emitted by the `JsonLd`
+component, which escapes `<` so a title containing `</script>` cannot close the
+tag early. Everything in it is derived from fields already on the page; it is
+not a second source of truth to keep in step.
+
+**Analytics** is Cloudflare Web Analytics, gated on
+`NEXT_PUBLIC_CF_ANALYTICS_TOKEN`. The beacon goes from the browser straight to
+Cloudflare, so no request touches the Worker, the database or the request
+budget. It sets no cookies and builds no cross-site profile, so there is
+nothing to put a consent banner in front of. With the token unset, no analytics
+code is emitted at all — a fork or a local run does not report into someone
+else's dashboard.
 
 ---
 
@@ -1028,6 +1244,14 @@ honeypot and rate limiting, a moderation queue, and author replies.
 black-canvas homepage framing, Anton hero wordmark, category filter, 3-column
 hairline grid, duotone covers, restyled post and tag pages. See
 [Design system](#design-system).
+
+**Done — SEO, scheduling, revisions, previews, analytics.** `sitemap.xml` and
+`robots.txt` · JSON-LD (`Blog` site-wide, `BlogPosting` per post, `WebPage` per
+page) · time-aware publishing with no cron · capped, deduplicated revision
+history with restore · signed expiring draft preview links · Cloudflare Web
+Analytics behind an env flag · editable About/Newsletter/Contact pages · nav
+reworked to About · Articles · Newsletter · Contact (`/stories` 308s to
+`/articles`) · cursor spotlight on the masthead.
 
 **Deliberately not built:** email notification of new comments · commenter
 accounts · comment editing or deletion by the commenter · captcha. The first is

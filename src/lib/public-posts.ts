@@ -15,7 +15,15 @@ import { getTagsForPosts } from "./tags";
 /** Posts per page. 12 fills the 3-column grid evenly (Design.md §5). */
 export const POSTS_PER_PAGE = 12;
 
-const publishedOnly = eq(posts.status, "published");
+/*
+  Published *and* due. A post whose published_at is in the future is scheduled:
+  it exists, the admin can see it, and it appears here the moment the time
+  passes — see the note on revalidation in the README.
+*/
+const publishedOnly = and(
+  eq(posts.status, "published"),
+  sql`${posts.publishedAt} <= now()`,
+);
 
 /** Newest first. `published_at` is always set once a post has been published. */
 const publishedOrder = [desc(posts.publishedAt), desc(posts.id)];
