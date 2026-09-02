@@ -58,8 +58,8 @@ function isRedirectsApi(pathname: string): boolean {
   return pathname === "/api/redirects" || pathname.startsWith("/api/redirects/");
 }
 
-function isDriveApi(pathname: string): boolean {
-  return pathname === "/api/drive" || pathname.startsWith("/api/drive/");
+function isImportApi(pathname: string): boolean {
+  return pathname === "/api/import" || pathname.startsWith("/api/import/");
 }
 
 function isAdminRoute(pathname: string): boolean {
@@ -91,7 +91,7 @@ export function isProtected(pathname: string, method: string): boolean {
     isPostsApi(pathname) ||
     isPagesApi(pathname) ||
     isRedirectsApi(pathname) ||
-    isDriveApi(pathname) ||
+    isImportApi(pathname) ||
     isMediaApi(pathname) ||
     isCommentsApi(pathname) ||
     isSeriesApi(pathname)

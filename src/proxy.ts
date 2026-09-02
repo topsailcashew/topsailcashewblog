@@ -31,7 +31,7 @@ export const config = {
     "/api/posts/:path*",
     "/api/pages/:path*",
     "/api/redirects/:path*",
-    "/api/drive/:path*",
+    "/api/import/:path*",
     "/api/media/:path*",
     "/api/comments/:path*",
     "/api/series/:path*",

@@ -36,6 +36,20 @@
       "when": 1788339647992,
       "tag": "0004_drive_import_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788341836521,
+      "tag": "0005_drop_drive_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788341836916,
+      "tag": "0006_add_import_provenance",
+      "breakpoints": true
     }
   ]
 }

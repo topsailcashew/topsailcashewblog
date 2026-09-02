@@ -51,9 +51,6 @@ uploads and the page cache work before any of them exist.
 | `ADMIN_PASSWORD` | yes | login | The password for the one author. Checked in constant time against what the login form sends. |
 | `SESSION_SECRET` | yes | login, proxy | HMAC key for the session cookie. `openssl rand -base64 32`. Rotating it signs you out. Without it every admin request is refused (see [Auth](#auth)). |
 | `R2_PUBLIC_BASE_URL` | no | media | Serve uploads from an r2.dev or custom domain instead of proxying them through the Worker. Applies to *new* uploads. |
-| `GOOGLE_CLIENT_EMAIL` | no | Drive import | `client_email` from the service account JSON key. |
-| `GOOGLE_PRIVATE_KEY` | no | Drive import | `private_key` from the same file. Real newlines or `\n` both work. |
-| `GOOGLE_DRIVE_FOLDER_ID` | no | Drive import | Last path segment of the Drive folder URL. |
 | `NEXT_PUBLIC_SITE_URL` | for RSS | public site | Absolute origin, e.g. `https://blog.example.com`. **Inlined at build time**, so it must be set wherever you run `npm run cf:deploy` — not as a Worker variable. Without it, feed links and images are relative and will not resolve in a reader. |
 | `NEXT_PUBLIC_SITE_NAME` | no | public site | Header and feed title. Defaults to "Topsail Cashew". |
 | `NEXT_PUBLIC_SITE_DESCRIPTION` | no | public site | Tagline under the title and the feed description. |
@@ -238,21 +235,18 @@ anything still references the image; `?force=1` overrides.
 
 → `204` · `409 { "error": …, "usage": [ … ] }` · `404` unknown
 
-### `GET /api/drive`
+### `GET /api/import`
 
-→ `200 { status, client_email, folder_id, imported_posts }`
+→ `200 { imported_posts }` — how many posts came in this way.
 
-`status` is `ready`, `missing-credentials` or `missing-folder`. Never returns
-the private key; `client_email` is included because the writer needs it to
-share the folder.
+### `POST /api/import`
 
-### `POST /api/drive/import`
+`{ "documents": [ { "path": "essays/x.md", "content": "…" } ] }`, at most ten
+per request. Files each as a draft and reports on each one individually, so a
+document that fails does not sink the batch.
 
-Walks the folder and files what it finds as drafts.
-
-→ `200 { report: { items, skipped, truncated, counts } }` ·
-`400` when the setup is incomplete, or when Drive refuses the account or the
-folder · `502` when Drive fails for another reason
+→ `200 { items: [ { path, outcome, postId?, title?, detail? } ] }` ·
+`422` for an empty or over-large batch
 
 ### `GET|POST /api/redirects`, `DELETE /api/redirects/:id`
 
@@ -370,66 +364,50 @@ opens is what was just typed.
 article list — even though no such value is stored. It is `published` with a
 future date, and `postStatusLabel` is the single place that decides.
 
-### Importing from Google Drive
+### Importing documents
 
-`/admin/import` walks a Drive folder and everything under it and files each
-document as a **draft**. An import is a transfer of raw material, never a
+`/admin/import` takes files or a whole folder, dragged in or picked, and files
+each document as a **draft**. An import is a transfer of raw material, never a
 publishing decision.
 
-**No Google SDK.** `googleapis` is tens of megabytes and `google-auth-library`
-is not much better; the Worker had around 180 KiB of headroom. What the SDK
-would do here is sign a JWT and POST it — about sixty lines of Web Crypto and
-`fetch`. The whole integration costs roughly 19 KiB.
+This replaced a Google Drive integration. That version worked, but it asked
+for a Google Cloud project, a service account, a JSON key and a folder share
+before it could import a single file — a great deal of setup standing between
+a writer and their own words. Dragging a folder in needs none of it.
 
-**A service account, not user OAuth.** No consent screen, no redirect URI, no
-refresh token to store and rotate, and nothing to re-authorise when a token is
-revoked. The writer shares one folder with the service account's address and
-that is the setup. The account can only see what has been shared with it,
-which for an importer is the behaviour you want anyway. The scope requested is
-`drive.readonly`.
+**Files are read in the browser** and their text posted as JSON rather than
+uploaded as multipart. A folder of essays is a few hundred kilobytes of text,
+and this way there is no file-size ceiling to explain, no temporary storage,
+and "which of these am I actually importing?" is answered on screen before
+anything is sent. Documents go in batches of ten, because Next buffers a whole
+request body for the proxy and one enormous body would be rejected with a
+message that explains nothing; the progress counter is the visible benefit.
 
-Setup, with the key never leaving the machine it was downloaded to:
+**Folder traversal** uses `webkitGetAsEntry`, falling back to a flat file list
+where that is unavailable. `readEntries` returns at most 100 children per call
+and signals the end with an empty batch, so it is called in a loop — the
+obvious one-shot implementation silently truncates any folder with more than a
+hundred items in it.
 
-```bash
-npx wrangler secret put GOOGLE_CLIENT_EMAIL     # client_email from the JSON key
-npx wrangler secret put GOOGLE_PRIVATE_KEY      # private_key from the JSON key
-npx wrangler secret put GOOGLE_DRIVE_FOLDER_ID  # last path segment of the folder URL
-```
+Only `.md`, `.markdown` and `.txt` are read. Anything else is counted and
+named as ignored rather than failing the drop.
 
-Then share the folder with `client_email` as a Viewer. `PEM` keys survive an
-env var in three shapes — real newlines from `wrangler`, literal `\n` when
-pasted from the JSON, and sometimes wrapped in quotes by a shell — so all
-three are normalised, because getting it wrong otherwise produces an opaque
-"invalid key" from Web Crypto.
-
-**What is read.** Google Docs are exported as Markdown, not HTML: the HTML
-export is a thicket of inline styles and wrapper spans that would have to be
-stripped back to the handful of nodes the editor supports, while the Markdown
-export is already close to that shape. `.md` and `.txt` files are read
-directly. Everything else is listed in the report with a reason and passed
-over. The walk is breadth-first, capped at 5 folders deep and 100 documents a
-run, and says when a cap stopped it.
-
-**Re-import rules**, chosen so a second run cannot destroy work:
+**Re-import rules.** A document is identified by its path within the drop
+(`essays/2026/slow-software.md`), stored in `posts.import_key`, so dropping the
+same folder again updates the drafts it made last time instead of producing a
+second copy of everything:
 
 | State | What happens |
 |---|---|
 | Not seen before | A new draft |
-| Published | Never touched — Drive stops being the source of truth once a piece is live |
-| Draft, Drive copy unchanged | Skipped, and not even re-downloaded |
-| Draft, Drive copy newer | Content replaced (reported explicitly — this is the case that can lose an edit made here) |
+| Published | Never touched — the file on disk stops being the source of truth once a piece is live |
+| Still a draft | Content replaced from the file |
 
-"Unchanged" is decided on Drive's own `modifiedTime` against
-`posts.drive_modified_at`, so editing in the admin never makes the importer
-think there is something to re-fetch. The slug is generated once, on first
-import, and never revised: a slug that moved because a Drive file was renamed
-would break the post's URL.
-
-The Drive id is written in the same `INSERT` that creates the post rather than
-in a follow-up `UPDATE`. Setting it afterwards leaves a window where a
-concurrent import sees no existing post and creates a duplicate — and the
-unique index would then reject the update rather than the insert, which is the
-harder failure to recover from.
+The slug is generated once, on first import, and never revised: a slug that
+moved because a heading changed would break the post's URL. The import key is
+written in the same `INSERT` that creates the post rather than a follow-up
+`UPDATE`, so a concurrent import cannot slip through the gap and create a
+duplicate.
 
 **Markdown to Tiptap.** The target is not Markdown in general, it is exactly
 the node set `src/components/editor/extensions.ts` defines. `content_json`
@@ -438,9 +416,9 @@ the next time the post is opened, so: headings clamp to H1–H3 rather than
 being dropped, images are lifted to block level because the Image extension is
 `inline: false`, and link destinations are filtered to the same schemes the
 editor allows — an import must not be a way to smuggle in a `javascript:` URL.
-Link destinations are scanned rather than pattern-matched, because a URL may
-contain balanced parentheses and a regex that stops at the first `)` swallows
-half of a Wikipedia link and leaks the rest into the sentence.
+Destinations are scanned rather than pattern-matched, because a URL may contain
+balanced parentheses and a regex that stops at the first `)` swallows half of a
+Wikipedia link and leaks the rest into the sentence.
 
 ### Media library
 
@@ -642,8 +620,8 @@ same bindings and same APIs as production, but not your account's.
 
 ### Worker size
 
-The dry run reports **2911 KiB gzipped** against Cloudflare's 3 MB free-plan
-limit — about **161 KiB of headroom**. The webfonts ship as static assets,
+The dry run reports **2910 KiB gzipped** against Cloudflare's 3 MB free-plan
+limit — about **162 KiB of headroom**. The webfonts ship as static assets,
 which are uploaded separately and do not count toward the Worker script.
 
 Phase 4 nearly broke this. Generating Open Graph images inside the Worker
@@ -757,7 +735,7 @@ posts           id, title, slug, content_json, content_html, excerpt,
                 series_id, search_vector,
                 meta_title, meta_description, canonical_url, noindex,
                 og_image_url, deleted_at,
-                drive_file_id, drive_modified_at
+                import_key, imported_at
 tags            id, name, slug
 post_tags       post_id, tag_id                    (composite pk)
 media           id, r2_key, url, alt_text, filename, content_type,

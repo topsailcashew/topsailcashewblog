@@ -1115,54 +1115,68 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .redirect-form input { display: block; width: 100%; margin-top: var(--s1); }
 .redirect-manager code { font-size: var(--text-xs); }
 
-/* --- drive import --------------------------------------------------------- */
+/* --- import ---------------------------------------------------------------- */
 
-.drive-status {
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s7) var(--s5);
+  margin-block: var(--s5);
+  border: 2px dashed var(--border);
+  text-align: center;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.dropzone.is-dragging {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+@media (prefers-reduced-motion: reduce) { .dropzone { transition: none; } }
+.dropzone-lead { font-family: var(--serif); font-size: var(--text-lg); font-weight: 600; }
+.dropzone .hint { margin-top: 0; }
+.dropzone-actions { margin-top: var(--s3); gap: var(--s2); }
+/* An author display:block would defeat the hidden attribute on the inputs. */
+.dropzone [hidden] { display: none !important; }
+
+.import-preview { margin-top: var(--s5); }
+.import-preview-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s4);
   flex-wrap: wrap;
-  margin-block: var(--s4);
-  padding-bottom: var(--s4);
-  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--s3);
 }
-.drive-status .hint { margin-top: 0; max-width: 46rem; }
-.drive-import code, .drive-setup code { font-size: var(--text-xs); }
+.import-preview-head .label { margin-bottom: 0; }
 
-.drive-steps {
-  margin: var(--s4) 0;
-  padding-left: var(--s5);
-  max-width: 46rem;
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-.drive-steps li + li { margin-top: var(--s3); }
-.drive-steps pre {
-  margin-top: var(--s2);
-  padding: var(--s3);
-  background: var(--surface, #fafafa);
+.import-list {
+  list-style: none;
+  padding-left: 0;
+  max-height: 20rem;
+  overflow-y: auto;
   border: 1px solid var(--border);
-  overflow-x: auto;
 }
+.import-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  font-size: var(--text-sm);
+}
+.import-list li + li { border-top: 1px solid var(--border); }
+.import-list-path { overflow-wrap: anywhere; }
 
-.drive-report { margin-top: var(--s5); }
-.drive-report .label { margin-top: var(--s5); }
-.drive-outcome { display: block; font-size: var(--text-sm); }
-.drive-outcome--created { color: var(--ok); }
-.drive-outcome--updated { color: var(--accent-ink); }
-.drive-outcome--failed { color: var(--danger); font-weight: 600; }
-.drive-outcome--unchanged, .drive-outcome--skipped-published { color: var(--fg-muted); }
-/*
-  The last column here is a link to the post, not an action button, so it does
-  not want the table's right-aligned-actions convention.
-*/
-.drive-report .story-table td:last-child,
-.drive-report .story-table th:last-child { text-align: left; }
-
-.drive-skipped { list-style: none; padding-left: 0; font-size: var(--text-sm); }
-.drive-skipped li { padding-block: var(--s1); }
-.drive-skipped .meta { display: inline; margin-left: var(--s2); }
+.import-report { margin-top: var(--s5); }
+/* The last column links to the draft; it is not an action button. */
+.import-report .story-table td:last-child,
+.import-report .story-table th:last-child { text-align: left; }
+.import-outcome { display: block; font-size: var(--text-sm); }
+.import-outcome--created { color: var(--ok); }
+.import-outcome--updated { color: var(--accent-ink); }
+.import-outcome--failed { color: var(--danger); font-weight: 600; }
+.import-outcome--skipped-published { color: var(--fg-muted); }
 
 .row-actions { display: inline-flex; gap: var(--s2); justify-content: flex-end; }
 

@@ -87,16 +87,16 @@ export const posts = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
 
     /*
-      Provenance for posts that arrived from Google Drive.
+      Provenance for posts that arrived from an import rather than the editor.
 
-      Not speculative: without it a second import cannot tell an already
-      imported document from a new one, and every run would create duplicate
-      drafts. `drive_modified_at` is Drive's own timestamp for the file as of
-      the last import, which is what makes "nothing has changed, skip it"
-      answerable without re-downloading and diffing every document.
+      `import_key` is the file's path within the folder that was dropped, e.g.
+      "essays/2026/slow-software.md". Unique, so dropping the same folder again
+      updates the drafts it made last time instead of producing a second copy
+      of everything — which is the behaviour you want when you have edited a
+      file locally and want the change reflected here.
     */
-    driveFileId: text("drive_file_id").unique(),
-    driveModifiedAt: timestamp("drive_modified_at", { withTimezone: true }),
+    importKey: text("import_key").unique(),
+    importedAt: timestamp("imported_at", { withTimezone: true }),
     /**
      * Maintained by Postgres, so it can never drift from the row.
      * Weighted A/B/C so a title match outranks a body match; the body is the

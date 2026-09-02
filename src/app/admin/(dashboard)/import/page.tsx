@@ -1,4 +1,4 @@
-import { DriveImport } from "@/components/admin/DriveImport";
+import { DropImport } from "@/components/admin/DropImport";
 
 export const dynamic = "force-dynamic";
 
@@ -6,14 +6,14 @@ export default function AdminImportPage() {
   return (
     <main className="admin-main">
       <div className="admin-head">
-        <h1 className="admin-title">Import from Drive</h1>
+        <h1 className="admin-title">Import</h1>
       </div>
       <p className="hint">
-        Reads a Google Drive folder and everything under it, and files each
-        document as a draft here. Google Docs, Markdown and plain text are
-        imported; anything else is listed and passed over.
+        Drop in Markdown or text files — one at a time, or a whole folder with
+        subfolders — and each becomes a draft here. Nothing is published;
+        drafts wait for you in Articles.
       </p>
-      <DriveImport />
+      <DropImport />
     </main>
   );
 }
