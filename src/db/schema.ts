@@ -256,6 +256,8 @@ export const pages = pgTable("pages", {
   slug: text("slug").notNull().unique(),
   contentJson: jsonb("content_json"),
   contentHtml: text("content_html"),
+  /** The About page uses this as its portrait; other pages may have none. */
+  coverImageUrl: text("cover_image_url"),
   status: text("status").notNull().default("draft").$type<PostStatus>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })

@@ -328,6 +328,39 @@ surprise than a name being briefly unavailable.
 
 Emptying the trash is the only genuinely irreversible action in the admin.
 
+### The home page and the About page
+
+The home page leads straight into the featured article. It used to open with
+the site's own name set enormous, which told a reader nothing they had not
+already got from the nav.
+
+About has a route of its own rather than going through `/[slug]`, because it
+has a layout: a greeting in the condensed display face with a cut-out portrait
+laid over it, then two actions and the tags the blog actually writes about.
+The prose underneath still comes from the `pages` row, so the copy stays
+editable in the admin — only the arrangement is fixed in code. The portrait is
+the page's `cover_image_url`, so that is editable too.
+
+The stroked line is guarded by `@supports (-webkit-text-stroke: …)`. Without
+it, `color: transparent` alone would leave a blank space where the name should
+be — the failure mode is invisible text, not unstyled text.
+
+The overlap is measured, not guessed: the reference this was adapted from uses
+long words that fill the line on their own, and a short greeting at the same
+proportion is several hundred pixels tall. The type is sized to the height the
+block should occupy, and the figure is placed against where the words actually
+end.
+
+### The accent
+
+Orange appears in three places, chosen so it recurs without being decoration:
+a short rule before every small-caps label — every public page has at least
+one, so no page has to opt in — the current section in the nav, and the text
+selection colour. Prose links and focus rings already used `--accent-ink`.
+
+The label mark is scoped to the public shell. The admin has a label on every
+panel, and the same mark there would be noise rather than signal.
+
 ### The featured post
 
 The home page leads with the newest post marked `featured`, or — when nothing

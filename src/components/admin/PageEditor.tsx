@@ -8,6 +8,7 @@ import { EMPTY_DOC, buildExtensions } from "@/components/editor/extensions";
 import type { SerializedPage } from "@/lib/pages";
 import { isImageFile, uploadImage } from "@/lib/upload-client";
 import { useAutosave } from "@/lib/use-autosave";
+import { CoverImagePicker } from "./CoverImagePicker";
 import { SaveStatus } from "./SaveStatus";
 
 /**
@@ -18,12 +19,18 @@ import { SaveStatus } from "./SaveStatus";
  * component instead would mean threading "is this a page?" through every one
  * of those controls.
  */
-type Draft = { title: string; slug: string; contentJson: JSONContent };
+type Draft = {
+  title: string;
+  slug: string;
+  coverImageUrl: string | null;
+  contentJson: JSONContent;
+};
 
 function draftFromPage(page: SerializedPage | null): Draft {
   return {
     title: page?.title ?? "",
     slug: page?.slug ?? "",
+    coverImageUrl: page?.cover_image_url ?? null,
     contentJson: (page?.content_json as JSONContent | null) ?? EMPTY_DOC,
   };
 }
@@ -104,6 +111,7 @@ export function PageEditor({ initialPage }: { initialPage: SerializedPage | null
         title: value.title.trim() || "Untitled",
         content_json: value.contentJson,
         content_html: editorRef.current?.getHTML() ?? "",
+        cover_image_url: value.coverImageUrl,
       };
 
       const id = pageIdRef.current;
@@ -255,6 +263,19 @@ export function PageEditor({ initialPage }: { initialPage: SerializedPage | null
 
       <section className="sidebar">
         <h2>Details</h2>
+
+        <div className="field">
+          <span className="field-label">Cover image</span>
+          <CoverImagePicker
+            url={draft.coverImageUrl}
+            onChange={(url) => update("coverImageUrl", url)}
+          />
+          <p className="hint">
+            The About page uses this as its portrait, laid over the heading. A
+            cut-out on a transparent background works best.
+          </p>
+        </div>
+
         <label>
           Slug
           <input

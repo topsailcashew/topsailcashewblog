@@ -139,6 +139,7 @@ export const createPageSchema = z.object({
   slug: slugSchema.optional(),
   content_json: contentJsonSchema,
   content_html: nullableText,
+  cover_image_url: nullableUrl,
   status: z.enum(POST_STATUSES).optional(),
 });
 
@@ -148,6 +149,7 @@ export const updatePageSchema = z
     slug: slugSchema.optional(),
     content_json: contentJsonSchema,
     content_html: nullableText,
+    cover_image_url: nullableUrl,
     status: z.enum(POST_STATUSES).optional(),
   })
   .refine((body) => Object.keys(body).length > 0, "Provide a field to update");

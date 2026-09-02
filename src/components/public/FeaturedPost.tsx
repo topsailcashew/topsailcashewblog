@@ -14,7 +14,14 @@ import { formatDate } from "@/lib/site";
  * Without a cover it becomes a single wide column rather than leaving a hole,
  * so a post published without art still leads properly.
  */
-export function FeaturedPost({ post }: { post: PostSummary }) {
+export function FeaturedPost({
+  post,
+  as: Heading = "h2",
+}: {
+  post: PostSummary;
+  /** h1 on the home page, where this is the leading content. */
+  as?: "h1" | "h2";
+}) {
   const primaryTag = post.tags[0];
 
   return (
@@ -44,9 +51,9 @@ export function FeaturedPost({ post }: { post: PostSummary }) {
           )}
         </div>
 
-        <h2 className="featured-title">
+        <Heading className="featured-title">
           <Link href={`/${post.slug}`}>{post.title}</Link>
-        </h2>
+        </Heading>
 
         {post.excerpt && <p className="featured-excerpt">{post.excerpt}</p>}
 

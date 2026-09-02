@@ -2,7 +2,6 @@ import { getDb } from "@/db/client";
 import { FeaturedPost } from "@/components/public/FeaturedPost";
 import { HomeFeed } from "@/components/public/HomeFeed";
 import { Pagination } from "@/components/public/Pagination";
-import { Wordmark } from "@/components/public/Wordmark";
 import { getFeaturedPost, getFeed } from "@/lib/public-posts";
 
 /**
@@ -32,11 +31,12 @@ export default async function HomePage() {
 
   return (
     <div className="shell-wrap">
-      <div className="hero">
-        <Wordmark as="h1" />
-      </div>
-
-      {featured && <FeaturedPost post={featured} />}
+      {/*
+        The lead article is the page's heading, so it carries the h1 the
+        masthead used to. A page whose largest words are its own name tells a
+        reader nothing; the article does.
+      */}
+      {featured && <FeaturedPost post={featured} as="h1" />}
 
       {/* With only the featured post to show, the filter row and its empty
           state would be furniture around nothing. */}

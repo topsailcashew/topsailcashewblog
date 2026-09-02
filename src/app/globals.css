@@ -132,6 +132,30 @@ p { margin: 0; }
 }
 .label--strong { color: var(--fg); }
 
+/*
+  The accent, used consistently rather than decoratively.
+
+  Every public page carries at least one of these small-caps labels —
+  Featured, Categories, Archive, Tagged, Series, Comments — so marking them
+  puts the same small orange tick on every page without any of them having to
+  opt in. Scoped to the public shell: the admin has labels on every panel, and
+  the same mark there would be noise rather than signal.
+*/
+.reading-shell .label::before {
+  content: "";
+  display: inline-block;
+  width: 0.75em;
+  height: 2px;
+  margin-right: 0.6em;
+  vertical-align: 0.25em;
+  background: var(--accent);
+}
+/* The mark belongs to the label, not to text that happens to be inside one. */
+.reading-shell .label--bare::before { display: none; }
+
+/* Where you are, in the accent — the one place it does wayfinding. */
+.nav-links a.is-current { color: var(--accent-ink); }
+
 /* Metadata: same size as a label but sentence case, for dates and counts. */
 .meta {
   font-family: var(--sans);
@@ -328,87 +352,138 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
    HOMEPAGE — hero, categories, grid (§5)
    ========================================================================= */
 
-.hero {
-  /* The measuring context the wordmark sizes itself against. */
-  container-type: inline-size;
-  padding-block: var(--s7) var(--s5);
+/* --- about ---------------------------------------------------------------- */
+
+.about { padding-top: var(--s6); }
+
+.about-intro {
+  max-width: 42rem;
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--fg-muted);
 }
 
 /*
-  The only place the display face appears. It measures 5.6em wide in Anton at
-  this tracking, so 100cqw / 5.6 = 17.7cqw fills the column on one line at
-  every width. The clamp is the fallback where container units are missing.
+  The statement and the portrait share one grid cell, so the photo sits over
+  the type the way the reference does. The type is the layer that must stay
+  readable, so the portrait is placed to one side of it rather than centred.
 */
-.wordmark--hero {
-  display: block;
+.about-hero {
   position: relative;
+  display: grid;
+  margin-top: var(--s5);
+  container-type: inline-size;
+}
+
+.about-statement {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
   font-family: var(--display);
   font-weight: 400;
   text-transform: uppercase;
-  letter-spacing: -0.025em;
-  line-height: 0.82;
-  white-space: nowrap;
-  font-size: clamp(2.5rem, 15vw, 14rem);
-  font-size: 17.7cqw;
-  margin: 0;
-
-  /* Radius of the lit area, and where JS last saw the cursor. */
-  --spot: clamp(90px, 13cqw, 300px);
-  --mx: 50%;
-  --my: 50%;
+  letter-spacing: -0.02em;
+  line-height: 0.86;
+  /*
+    Sized against the container so it scales with the measure. The reference's
+    words are long ones that fill the width on their own; a short greeting at
+    the same proportion would be several hundred pixels tall and push
+    everything else off the screen, so this is tuned to the height the block
+    should occupy rather than to filling the line.
+  */
+  font-size: 24cqw;
 }
+/* Fit the text, so the outline hugs the glyphs and the figure can be placed
+   against the words rather than against the column. */
+.about-line { display: block; width: fit-content; white-space: nowrap; }
 
 /*
-  Two stacked copies of the word. The accent copy sits exactly on top of the
-  black one and is masked to a soft circle at the cursor, so the letters under
-  the pointer read orange and the rest stays black. Masking the whole layer
-  rather than colouring individual letters means the boundary can fall
-  mid-glyph, which is the point — the effect follows the cursor, not the
-  letter grid.
+  The stroked line.
+
+  Guarded: without text-stroke support, `color: transparent` alone would make
+  the word invisible rather than outlined — the failure mode is a blank space
+  where the name should be.
 */
-.wordmark-face {
-  display: block;
-}
-
-.wordmark-face--lit {
-  position: absolute;
-  inset: 0;
-  color: var(--accent);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 180ms ease-out;
-  -webkit-mask-image: radial-gradient(
-    circle var(--spot) at var(--mx) var(--my),
-    #000 0%,
-    #000 42%,
-    transparent 78%
-  );
-  mask-image: radial-gradient(
-    circle var(--spot) at var(--mx) var(--my),
-    #000 0%,
-    #000 42%,
-    transparent 78%
-  );
-}
-
-.wordmark--hero[data-lit="on"] .wordmark-face--lit {
-  opacity: 1;
-}
-
-/*
-  Touch devices have no hovering cursor to follow, and a spotlight chasing the
-  pointer is exactly the kind of movement `prefers-reduced-motion` is asking us
-  not to make. Both fall back to the plain black wordmark.
-*/
-@media (hover: none), (prefers-reduced-motion: reduce) {
-  .wordmark--hero[data-lit="on"] .wordmark-face--lit {
-    opacity: 0;
+@supports (-webkit-text-stroke: 1px black) {
+  .about-line--outline {
+    -webkit-text-stroke: 2px var(--fg);
+    color: transparent;
   }
+}
+
+/*
+  The figure overlaps the words rather than sitting beside them — that layering
+  is the whole idea. It is placed from the left rather than the right because
+  the greeting is short: anchored to the right edge it would clear the type
+  entirely and the two would read as separate columns.
+*/
+.about-portrait {
+  grid-area: 1 / 1;
+  justify-self: start;
+  align-self: end;
+  /* Measured against the set text: the longer line reaches about 55% of the
+     column, so the figure starts inside it and overlaps the tail of both. */
+  margin-left: 42%;
+  width: min(30%, 18rem);
+  /* A tall cut-out would otherwise stretch the hero past the words it is
+     meant to be standing in front of. */
+  max-height: 34rem;
+  object-fit: contain;
+  object-position: bottom;
+  position: relative;
+  z-index: 1;
+  filter: grayscale(1) contrast(1.08);
+  pointer-events: none;
+}
+.about-hero--bare { min-height: 0; }
+
+.about-under {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s5);
+  flex-wrap: wrap;
+  margin-top: var(--s5);
+  padding-bottom: var(--s6);
+  border-bottom: 1px solid var(--border);
+}
+.about-actions { display: flex; gap: var(--s3); flex-wrap: wrap; }
+
+.about-topics { display: flex; flex-direction: column; gap: var(--s2); }
+.about-topic-list {
+  display: flex;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  font-family: var(--sans);
+  font-size: var(--text-sm);
+}
+.about-topic-list a { color: var(--fg); text-decoration: none; }
+.about-topic-list a:hover { color: var(--accent-ink); }
+
+.about-prose { margin-top: var(--s6); }
+
+@media (max-width: 46rem) {
+  /* The portrait stops overlapping and simply follows the words: at this
+     width it covers too much of them to leave either legible. */
+  .about-hero { display: block; }
+  .about-statement { font-size: 26cqw; }
+  .about-portrait {
+    display: block;
+    /* Bounded by height here: a portrait-shaped cut-out at 70% of a phone's
+       width is most of a screen to scroll past before the buttons. */
+    width: auto;
+    max-width: 60%;
+    max-height: 40vh;
+    margin: var(--s4) 0 0 auto;
+  }
+  .about-under { align-items: flex-start; }
 }
 
 /* --- featured post -------------------------------------------------------- */
 
 .featured {
+  margin-top: var(--s6);
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: var(--s6);
@@ -447,7 +522,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   letter-spacing: -0.02em;
   line-height: 1.1;
   /* Bigger than a card title, smaller than the masthead — it leads the page
-     without competing with the wordmark above it. */
+     without shouting. */
   font-size: clamp(1.75rem, 4.2vw, 3rem);
   margin: 0;
 }

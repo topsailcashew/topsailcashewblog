@@ -292,6 +292,32 @@ export async function getFeaturedPost(db: BlogDatabase): Promise<PostSummary | n
   return toSummary(serializePost(row, tags));
 }
 
+/**
+ * The tags carrying the most published writing.
+ *
+ * For the About page's "writes about" line, which should reflect what has
+ * actually been written rather than a list someone has to maintain by hand.
+ */
+export async function listProminentTags(
+  db: BlogDatabase,
+  limit = 6,
+): Promise<{ name: string; slug: string; count: number }[]> {
+  const rows = await db
+    .select({
+      name: tags.name,
+      slug: tags.slug,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(tags)
+    .innerJoin(postTags, eq(postTags.tagId, tags.id))
+    .innerJoin(posts, eq(posts.id, postTags.postId))
+    .where(publishedOnly)
+    .groupBy(tags.id, tags.name, tags.slug)
+    .orderBy(sql`count(*) desc`, asc(tags.name))
+    .limit(limit);
+  return rows;
+}
+
 export async function listIndexableForSitemap(
   db: BlogDatabase,
 ): Promise<SerializedPost[]> {

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { posts } from "@/db/schema";
 import { createPost, trashPost, updatePost } from "@/lib/posts";
-import { getFeaturedPost } from "@/lib/public-posts";
+import { syncPostTags } from "@/lib/tags";
+import { getFeaturedPost, listProminentTags } from "@/lib/public-posts";
 import { db, hasDatabase, resetTables, setupDatabase, teardownDatabase } from "./helpers";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -107,5 +108,50 @@ describe(
       await createPost(db(), { title: "Only A Draft", status: "draft" });
       assert.equal(await getFeaturedPost(db()), null);
     });
+
+    describe("what the blog writes about", () => {
+      it("ranks tags by how much published writing carries them", async () => {
+        const a = await publish("One", daysAgo(4));
+        const b = await publish("Two", daysAgo(3));
+        const c = await publish("Three", daysAgo(2));
+        await syncPostTags(db(), a.id, ["Essays", "Craft"]);
+        await syncPostTags(db(), b.id, ["Essays"]);
+        await syncPostTags(db(), c.id, ["Essays", "Craft", "Notes"]);
+
+        assert.deepEqual(
+          (await listProminentTags(db(), 5)).map((t) => [t.name, t.count]),
+          [
+            ["Essays", 3],
+            ["Craft", 2],
+            ["Notes", 1],
+          ],
+        );
+      });
+
+      it("counts only writing a reader can actually reach", async () => {
+        const live = await publish("Live", daysAgo(2));
+        const later = await publish("Later", inDays(5));
+        const binned = await publish("Binned", daysAgo(1));
+        const draft = await createPost(db(), { title: "Draft", status: "draft" });
+
+        for (const post of [live, later, binned]) {
+          await syncPostTags(db(), post.id, ["Essays"]);
+        }
+        await syncPostTags(db(), draft.id, ["Essays"]);
+        await trashPost(db(), binned.id);
+
+        // Scheduled, trashed and draft posts must not inflate the count.
+        assert.deepEqual(
+          (await listProminentTags(db(), 5)).map((t) => [t.name, t.count]),
+          [["Essays", 1]],
+        );
+      });
+
+      it("is empty when nothing is tagged", async () => {
+        await publish("Untagged", daysAgo(1));
+        assert.deepEqual(await listProminentTags(db(), 5), []);
+      });
+    });
+
   },
 );

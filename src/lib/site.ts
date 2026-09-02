@@ -8,9 +8,16 @@ export const siteConfig = {
   description:
     process.env.NEXT_PUBLIC_SITE_DESCRIPTION ?? "Essays, notes, and long-form writing.",
   language: "en",
-  /** Shown beside the wordmark in the nav, and as the post byline. */
+  /** The post byline, and the copyright line in the footer. */
   author: process.env.NEXT_PUBLIC_SITE_AUTHOR ?? "Nathaniel Senje",
   authorRole: process.env.NEXT_PUBLIC_SITE_AUTHOR_ROLE ?? "Personal blog",
+  /**
+   * Where "Get in touch" goes.
+   *
+   * A published address attracts scrapers; overriding this with a forwarding
+   * or alias address is the usual way to keep the real inbox out of the lists.
+   */
+  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "topsailcashew@gmail.com",
 } as const;
 
 /**

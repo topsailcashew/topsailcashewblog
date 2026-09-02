@@ -20,6 +20,7 @@ export type SerializedPage = {
   slug: string;
   content_json: unknown;
   content_html: string | null;
+  cover_image_url: string | null;
   status: PostStatus;
   created_at: string;
   updated_at: string;
@@ -32,10 +33,16 @@ export function serializePage(row: PageRow): SerializedPage {
     slug: row.slug,
     content_json: row.contentJson ?? null,
     content_html: row.contentHtml,
+    cover_image_url: row.coverImageUrl,
     status: row.status,
     created_at: toIso(row.createdAt),
     updated_at: toIso(row.updatedAt),
   };
+}
+
+function emptyToNull(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  return value === "" ? null : value;
 }
 
 function toIso(value: Date | string): string {
@@ -90,6 +97,7 @@ export async function createPage(
         slug,
         contentJson: input.content_json ?? null,
         contentHtml: input.content_html ?? null,
+        coverImageUrl: emptyToNull(input.cover_image_url),
         status: input.status ?? "draft",
       })
       .returning();
@@ -116,6 +124,9 @@ export async function updatePage(
   if (input.title !== undefined) patch.title = input.title.trim();
   if (input.content_json !== undefined) patch.contentJson = input.content_json;
   if (input.content_html !== undefined) patch.contentHtml = input.content_html;
+  if (input.cover_image_url !== undefined) {
+    patch.coverImageUrl = emptyToNull(input.cover_image_url);
+  }
   if (input.status !== undefined) patch.status = input.status;
 
   const row =

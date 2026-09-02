@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ADD COLUMN "cover_image_url" text;
