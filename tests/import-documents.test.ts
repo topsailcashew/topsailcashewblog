@@ -4,11 +4,7 @@ import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { POST as importRoute } from "@/app/api/import/route";
 import { posts } from "@/db/schema";
-import {
-  countImportedPosts,
-  importDocument,
-  isImportableName,
-} from "@/lib/import-documents";
+import { countImportedPosts, importDocument } from "@/lib/import-documents";
 import { getPostById, updatePost } from "@/lib/posts";
 import { getFeed, getPublishedPost } from "@/lib/public-posts";
 import { db, hasDatabase, resetTables, setupDatabase, teardownDatabase } from "./helpers";
@@ -25,17 +21,6 @@ const post = (documents: { path: string; content: string }[]) =>
 async function bodyOf<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
-
-describe("importable names", () => {
-  it("accepts text and markdown, and nothing else", () => {
-    for (const name of ["a.md", "A.MD", "notes.markdown", "plain.txt", "deep/path/x.md"]) {
-      assert.equal(isImportableName(name), true, name);
-    }
-    for (const name of ["photo.jpg", "sheet.csv", "doc.docx", "page.html", "noext"]) {
-      assert.equal(isImportableName(name), false, name);
-    }
-  });
-});
 
 describe(
   "importing documents",
@@ -88,6 +73,23 @@ describe(
       });
       const created = await getPostById(db(), item.postId!);
       assert.equal(created?.title, "untitled-thoughts");
+    });
+
+    it("strips the extension from every kind of file, not just the text ones", async () => {
+      // A .docx with no Title style falls back to its filename. Leaving the
+      // extension on puts it in the title of a published post, where readers
+      // see it — which is exactly what happened.
+      const cases: [string, string][] = [
+        ["August 22 - We Pivot, a letter.docx", "August 22 - We Pivot, a letter"],
+        ["Notes.MARKDOWN", "Notes"],
+        ["plain.txt", "plain"],
+        ["archive/Drive Export/deep.docx", "deep"],
+      ];
+      for (const [path, expected] of cases) {
+        const item = await importDocument(db(), { path, content: "Body with no heading." });
+        const created = await getPostById(db(), item.postId!);
+        assert.equal(created?.title, expected, path);
+      }
     });
 
     it("updates the same draft when the file is dropped again", async () => {

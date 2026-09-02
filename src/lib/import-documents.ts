@@ -39,14 +39,6 @@ export type ImportedItem = {
   detail?: string;
 };
 
-/** Extensions we can read. Anything else is filtered out before upload. */
-export const IMPORTABLE_EXTENSIONS = [".md", ".markdown", ".txt"] as const;
-
-export function isImportableName(name: string): boolean {
-  const lower = name.toLowerCase();
-  return IMPORTABLE_EXTENSIONS.some((ext) => lower.endsWith(ext));
-}
-
 export async function importDocument(
   db: BlogDatabase,
   document: ImportedDocument,
@@ -122,10 +114,19 @@ export async function importDocument(
   }
 }
 
-/** The file's own name, without directories or extension. */
+/**
+ * The file's own name, without directories or extension.
+ *
+ * Every extension the importer accepts has to be listed here, not just the
+ * text ones. A .docx with no Title style and no leading heading falls back to
+ * its filename, and a missing entry here puts the extension in the title of a
+ * published post — where it is visible to readers and outlives the import.
+ */
+const TITLE_EXTENSIONS = /\.(docx|md|markdown|txt)$/i;
+
 function fileTitle(path: string): string {
   const name = path.split("/").pop() ?? path;
-  return name.replace(/\.(md|markdown|txt)$/i, "").trim();
+  return name.replace(TITLE_EXTENSIONS, "").trim();
 }
 
 /** How many posts came from an import. Shown on the import screen. */
