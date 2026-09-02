@@ -2,12 +2,14 @@
 
 import { useCallback, useState } from "react";
 import type { SerializedRevision } from "@/lib/revisions";
+import { EditorSection } from "./EditorSection";
 
 /**
  * Snapshot history for one post.
  *
  * Loaded on demand rather than with the page: most editing sessions never open
  * it, and fetching a list nobody looks at would cost a query on every load.
+ * The section's first expansion is what triggers the fetch.
  */
 export function RevisionPanel({
   postId,
@@ -16,7 +18,6 @@ export function RevisionPanel({
   postId: string | null;
   onRestored: () => void | Promise<void>;
 }) {
-  const [open, setOpen] = useState(false);
   const [revisions, setRevisions] = useState<SerializedRevision[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,13 +37,6 @@ export function RevisionPanel({
       setBusy(false);
     }
   }, [postId]);
-
-  const toggle = useCallback(() => {
-    setOpen((wasOpen) => {
-      if (!wasOpen && revisions === null) void load();
-      return !wasOpen;
-    });
-  }, [load, revisions]);
 
   const restore = useCallback(
     async (revisionId: string) => {
@@ -78,18 +72,14 @@ export function RevisionPanel({
   if (!postId) return null;
 
   return (
-    <div className="field revision-panel">
-      <button
-        type="button"
-        className="btn btn--quiet btn--small"
-        onClick={toggle}
-        aria-expanded={open}
-      >
-        {open ? "Hide history" : "Version history"}
-      </button>
-
-      {open && (
-        <>
+    <EditorSection
+      title="History"
+      summary={revisions === null ? undefined : `${revisions.length}`}
+      onOpen={() => {
+        if (revisions === null) void load();
+      }}
+    >
+      <div className="revision-panel">
           {busy && <p className="hint">Working…</p>}
           {error && (
             <p className="error" role="alert">
@@ -125,9 +115,8 @@ export function RevisionPanel({
               ))}
             </ul>
           )}
-        </>
-      )}
-    </div>
+      </div>
+    </EditorSection>
   );
 }
 

@@ -784,18 +784,51 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 
 .admin-shell { max-width: var(--shell); margin: 0 auto; padding: 0 var(--gutter) var(--s8); }
 
-.admin-nav { align-items: center; }
-.admin-nav .nav-links a { white-space: nowrap; }
-.admin-nav .nav-author { flex-direction: row; align-items: center; gap: var(--s4); }
+/* --- admin nav ------------------------------------------------------------ */
+
+.admin-nav-left { display: flex; align-items: baseline; gap: var(--s5); min-width: 0; }
+.admin-nav-links { display: flex; align-items: baseline; gap: var(--s4); flex-wrap: wrap; }
+.admin-nav-links a {
+  font-family: var(--sans);
+  font-size: var(--text-sm);
+  color: var(--fg);
+  text-decoration: none;
+}
+.admin-nav-links a:hover { color: var(--accent-ink); }
+.admin-nav-minor { color: var(--fg-muted) !important; font-size: var(--text-xs) !important; }
+.admin-nav-minor:hover { color: var(--accent-ink) !important; }
+.admin-nav-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 1em;
+  background: var(--border);
+}
+.admin-nav-right { display: flex; align-items: center; gap: var(--s3); }
+
+/*
+  The admin nav never declared a layout of its own — it was a block, so its two
+  halves stacked and the account controls sat on their own line under the
+  wordmark. It wants what the public `.nav` has.
+*/
+.admin-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding-block: var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+.admin-nav a { white-space: nowrap; }
 @media (max-width: 68rem) {
   .admin-nav { flex-wrap: wrap; row-gap: var(--s3); }
-  .admin-nav .nav-left { width: 100%; }
-  .admin-nav .nav-author { width: 100%; justify-content: flex-end; }
+  .admin-nav-left { width: 100%; }
+  .admin-nav-right { width: 100%; justify-content: flex-end; }
 }
 @media (max-width: 44rem) {
-  .admin-nav .nav-left { flex-wrap: wrap; gap: var(--s3); }
-  .admin-nav .nav-links { flex-wrap: wrap; gap: var(--s4); }
-  .admin-nav .nav-author { justify-content: flex-start; }
+  .admin-nav-left { flex-wrap: wrap; gap: var(--s3); }
+  .admin-nav-links { gap: var(--s3); }
+  /* The rule only reads as a group separator on one line. */
+  .admin-nav-divider { display: none; }
 }
 
 .admin-main { padding-top: var(--s6); }
@@ -810,6 +843,27 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 
 .panel-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s5); }
 @media (max-width: 46rem) { .panel-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* Counts as a plain strip: hairline separators, no box. */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0;
+  margin-bottom: var(--s5);
+  border-block: 1px solid var(--border);
+}
+.stat-strip > * { padding: var(--s4) var(--s4) var(--s4) 0; }
+.stat-strip > * + * { border-left: 1px solid var(--border); padding-left: var(--s4); }
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
+}
+.panel-head > h2 { margin-bottom: 0; }
+.panel-head .panel-more { margin-top: 0; }
 
 .panel { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--s5); }
 .panel > h2 { margin-bottom: var(--s4); }
@@ -834,6 +888,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .story-table a:hover { color: var(--accent-ink); text-decoration: underline; }
 .status--published { color: var(--ok); }
 .status--draft { color: var(--fg-muted); }
+/* Written but not yet readable — the accent marks it as pending, not live. */
+.status--scheduled { color: var(--accent-ink); }
+.status--trashed { color: var(--fg-muted); }
 
 /* --- editor sidebar: publication + history -------------------------------- */
 
@@ -959,7 +1016,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   flex-wrap: wrap;
   margin-bottom: var(--s4);
 }
-.media-search { flex: 1 1 16rem; height: var(--control-h); }
+.media-toolbar .meta { margin-left: auto; }
+/* Capped: a search box the width of the page reads as a text field. */
+.media-search { flex: 0 1 26rem; height: var(--control-h); }
 .media-upload { cursor: pointer; }
 
 /*
@@ -1182,11 +1241,117 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   color: var(--fg-muted);
 }
 
-.sidebar { margin-top: var(--s6); padding-top: var(--s5); border-top: 1px solid var(--border); }
-.sidebar > h2 { margin-bottom: var(--s4); }
-.sidebar label, .sidebar .field { display: block; margin-top: var(--s4); font-size: var(--text-xs); color: var(--fg-muted); }
-.sidebar input, .sidebar textarea, .sidebar select { display: block; width: 100%; margin-top: var(--s1); }
+/*
+  Editing surface on the left, settings on the right.
+
+  Everything used to be one column, which meant the excerpt, slug, tags,
+  publication date and SEO all sat a full screen below the fold while the
+  right-hand third of a wide window stayed empty. The sidebar sticks, so the
+  publish controls stay reachable however long the post gets.
+*/
+.editor-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: var(--s6);
+  align-items: start;
+}
+@media (max-width: 64rem) {
+  .editor-columns { grid-template-columns: minmax(0, 1fr); }
+}
+.editor-main { min-width: 0; }
+
+.editor-sidebar {
+  position: sticky;
+  top: var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  /* Long sections scroll within the sidebar instead of pushing it off-screen. */
+  max-height: calc(100vh - var(--s6));
+  overflow-y: auto;
+}
+@media (max-width: 64rem) {
+  .editor-sidebar { position: static; max-height: none; overflow: visible; }
+}
+
+.editor-section { border: 1px solid var(--border); }
+.editor-section[open] { border-color: var(--fg); }
+.editor-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: var(--s3);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.editor-section-head::-webkit-details-marker { display: none; }
+.editor-section-head:hover { background: var(--surface, #fafafa); }
+.editor-section-title {
+  font-family: var(--sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.editor-section-summary {
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+  text-align: right;
+}
+/*
+  A caret that turns, so open/closed reads without parsing the label.
+
+  Drawn with borders rather than set as "▸": the display stack has no glyph for
+  it and fell back to something that rendered as an asterisk.
+*/
+.editor-section-title::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 0.5em;
+  vertical-align: 0.05em;
+  border-top: 0.3em solid transparent;
+  border-bottom: 0.3em solid transparent;
+  border-left: 0.4em solid var(--fg-muted);
+  transition: transform 120ms ease;
+}
+.editor-section[open] > .editor-section-head .editor-section-title::before {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .editor-section-title::before { transition: none; }
+}
+.editor-section-body { padding: 0 var(--s3) var(--s3); }
+.editor-section-body > :first-child { margin-top: 0; }
+
+.editor-sidebar label,
+.editor-sidebar .field {
+  display: block;
+  margin-top: var(--s4);
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+}
+.editor-sidebar input,
+.editor-sidebar textarea,
+.editor-sidebar select {
+  display: block;
+  width: 100%;
+  margin-top: var(--s1);
+}
+/*
+  An author `display: block` outranks the UA stylesheet's rule for [hidden],
+  so the cover picker's hidden file input was rendering as a raw "Choose File"
+  control underneath its own button.
+*/
+.editor-sidebar [hidden] { display: none !important; }
 .field-label { display: block; margin-bottom: var(--s2); }
+
+.editor-bar-actions { gap: var(--s2); }
+.editor-bar-state { gap: var(--s3); }
+
 
 /* --- pieces the scan found referenced but unstyled --------------------- */
 

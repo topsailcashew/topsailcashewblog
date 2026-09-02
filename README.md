@@ -330,6 +330,23 @@ reported as an error rather than quietly obeyed. `canonical_url` is applied to
 both the `<link rel="canonical">` and the JSON-LD `mainEntityOfPage`, so a
 crawler is never told two different things.
 
+### The editor
+
+Two columns: the writing surface on the left, a sticky settings sidebar on the
+right holding four collapsible sections — **Publish**, **Details**, **SEO** and
+**History**. Each is a `<details>` element, so the disclosure semantics and
+keyboard handling come from the browser and every section behaves the same
+way. History fetches its list the first time it is opened, not on page load.
+
+**Preview** opens the post as a reader sees it. A published post has a public
+URL already; a draft or a scheduled post has none, so the button mints a signed
+preview token and opens that instead. Pending edits are flushed first, so what
+opens is what was just typed.
+
+"Scheduled" is shown wherever a status is — the editor bar, the dashboard, the
+article list — even though no such value is stored. It is `published` with a
+future date, and `postStatusLabel` is the single place that decides.
+
 ### Media library
 
 `/admin/media` browses, searches, retags and deletes uploads.
@@ -530,8 +547,8 @@ same bindings and same APIs as production, but not your account's.
 
 ### Worker size
 
-The dry run reports **2891 KiB gzipped** against Cloudflare's 3 MB free-plan
-limit — about **181 KiB of headroom**. The webfonts ship as static assets,
+The dry run reports **2892 KiB gzipped** against Cloudflare's 3 MB free-plan
+limit — about **180 KiB of headroom**. The webfonts ship as static assets,
 which are uploaded separately and do not count toward the Worker script.
 
 Phase 4 nearly broke this. Generating Open Graph images inside the Worker

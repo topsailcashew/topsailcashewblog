@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getDb } from "@/db/client";
 import { CommentActions } from "@/components/admin/CommentActions";
 import { PostRowActions } from "@/components/admin/PostRowActions";
+import { PostStatusBadge } from "@/components/admin/PostStatusBadge";
 import { QuickDraft } from "@/components/admin/QuickDraft";
 import { countByStatus, listForModeration } from "@/lib/comments";
 import { listMedia } from "@/lib/media";
@@ -44,24 +45,31 @@ export default async function AdminDashboard() {
         </p>
       )}
 
+      {/*
+        Counts run the full width as one strip rather than sitting in a boxed
+        panel beside the quick-draft form. Four numbers do not need a container
+        of their own, and pairing them with a text form made a short panel
+        stretch to match a tall one, leaving half of it empty.
+      */}
+      <div className="stat-strip">
+        <Stat label="Articles" value={postCounts.published} href="/admin/articles?status=published" />
+        <Stat label="Drafts" value={postCounts.draft} href="/admin/articles?status=draft" />
+        <Stat label="Comments" value={commentCounts.approved} href="/admin/comments?status=approved" />
+        <Stat label="Pending" value={commentCounts.pending} href="/admin/comments" />
+        {postCounts.trash > 0 && (
+          <Stat label="Trash" value={postCounts.trash} href="/admin/articles?status=trash" />
+        )}
+      </div>
+
       <div className="dashboard-grid">
         <div className="dashboard-main">
-          <div className="panel-row">
-            <div className="panel">
-              <h2 className="label">Overview</h2>
-              <div className="stat-grid">
-                <Stat label="Articles" value={postCounts.published} href="/admin/articles?status=published" />
-                <Stat label="Drafts" value={postCounts.draft} href="/admin/articles?status=draft" />
-                <Stat label="Comments" value={commentCounts.approved} href="/admin/comments?status=approved" />
-                <Stat label="Pending" value={commentCounts.pending} href="/admin/comments" />
-              </div>
-            </div>
-
-            <QuickDraft />
-          </div>
-
           <div className="panel">
-            <h2 className="label">Recent articles</h2>
+            <div className="panel-head">
+              <h2 className="label">Recent articles</h2>
+              <Link href="/admin/articles" className="panel-more">
+                All articles →
+              </Link>
+            </div>
             {posts.length === 0 ? (
               <p className="muted">
                 Nothing yet. <Link href="/admin/posts/new">Write the first one.</Link>
@@ -84,9 +92,7 @@ export default async function AdminDashboard() {
                           <Link href={`/admin/posts/${post.id}`}>{post.title}</Link>
                         </td>
                         <td>
-                          <span className={`status--${post.status}`}>
-                            {post.status}
-                          </span>
+                          <PostStatusBadge post={post} />
                         </td>
                         <td>{formatDate(post.updated_at)}</td>
                         <td>
@@ -102,6 +108,9 @@ export default async function AdminDashboard() {
         </div>
 
         <aside className="dashboard-aside">
+          {/* Secondary: a shortcut, not the main event — "Write" is in the nav. */}
+          <QuickDraft />
+
           <div className="panel">
             <h2 className="label">Awaiting moderation</h2>
             {pendingComments.length === 0 ? (

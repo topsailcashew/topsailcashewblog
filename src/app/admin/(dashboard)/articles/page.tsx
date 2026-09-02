@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getDb } from "@/db/client";
 import { EmptyTrashButton } from "@/components/admin/EmptyTrashButton";
 import { PostRowActions } from "@/components/admin/PostRowActions";
+import { PostStatusBadge, postStatusLabel } from "@/components/admin/PostStatusBadge";
 import { countPostsByStatus, listPosts, type SerializedPost } from "@/lib/posts";
 import { POST_LIST_FILTERS, type PostListFilter } from "@/lib/validation";
 
@@ -101,16 +102,14 @@ export default async function AdminArticlesPage({
                   {post.title}
                 </Link>
               )}
-              <span className={`status--${inTrash ? "draft" : post.status}`}>
-                {inTrash ? "trashed" : isScheduled(post) ? "scheduled" : post.status}
-              </span>
+              <PostStatusBadge post={post} />
               <PostRowActions id={post.id} title={post.title} trashed={inTrash} />
             </div>
             <p className="meta">
               /{post.slug} ·{" "}
               {inTrash
                 ? `trashed ${new Date(post.deleted_at!).toLocaleString()}`
-                : isScheduled(post)
+                : postStatusLabel(post) === "scheduled"
                   ? `goes live ${new Date(post.published_at!).toLocaleString()}`
                   : `updated ${new Date(post.updated_at).toLocaleString()}`}
               {post.tags.length > 0 && ` · ${post.tags.map((tag) => tag.name).join(", ")}`}
@@ -119,15 +118,6 @@ export default async function AdminArticlesPage({
         ))}
       </ul>
     </main>
-  );
-}
-
-/** Published, but dated forward — not yet visible to a reader. */
-function isScheduled(post: SerializedPost): boolean {
-  return (
-    post.status === "published" &&
-    post.published_at !== null &&
-    new Date(post.published_at).getTime() > Date.now()
   );
 }
 

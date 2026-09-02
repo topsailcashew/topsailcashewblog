@@ -8,8 +8,11 @@ import { EMPTY_DOC, buildExtensions } from "@/components/editor/extensions";
 import type { SerializedPost } from "@/lib/posts";
 import type { SerializedSeries } from "@/lib/series";
 import { useAutosave } from "@/lib/use-autosave";
+import { useIsFuture } from "@/lib/use-is-future";
 import { isImageFile, uploadImage } from "@/lib/upload-client";
 import { CoverImagePicker } from "./CoverImagePicker";
+import { EditorSection } from "./EditorSection";
+import { PreviewButton } from "./PreviewButton";
 import { PublishPanel } from "./PublishPanel";
 import { RevisionPanel } from "./RevisionPanel";
 import { SeoPanel, type SeoFields } from "./SeoPanel";
@@ -133,6 +136,32 @@ export function PostEditor({
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+
+  /*
+    "Scheduled" is not a stored status — it is `published` with a future date.
+    The bar said "published" for a post nobody could read yet, so it is spelled
+    out here and reused as the sidebar's collapsed summary.
+  */
+  // Unconditional: `&&` would short-circuit the hook on a draft.
+  const dated = useIsFuture(publishedAt);
+  const statusLabel = status === "published" && dated ? "scheduled" : status;
+
+  const tagSummary =
+    draft.tags.length === 0
+      ? undefined
+      : `${draft.tags.length} tag${draft.tags.length === 1 ? "" : "s"}`;
+
+  /** What the SEO section shows when collapsed, so overrides are not hidden. */
+  const seoSummary = (() => {
+    const set = [
+      draft.seo.metaTitle.trim() !== "" && "title",
+      draft.seo.metaDescription.trim() !== "" && "description",
+      draft.seo.canonicalUrl.trim() !== "" && "canonical",
+      draft.seo.ogImageUrl.trim() !== "" && "image",
+    ].filter(Boolean) as string[];
+    if (draft.seo.noindex) return "hidden from search";
+    return set.length > 0 ? `${set.length} set` : undefined;
+  })();
 
   /** A brand-new post is only worth creating once it has something in it. */
   const hasSubstance =
@@ -308,19 +337,41 @@ export function PostEditor({
   return (
     <div className="editor-page">
       <header className="editor-bar">
-        <div className="row">
-          <span className={`status--${status}`}>{status}</span>
+        <div className="row editor-bar-state">
+          <span className={`status--${status}`}>{statusLabel}</span>
           <SaveStatus state={state} dirty={isDirty} />
         </div>
-        <div className="row">
-          <button type="button" onClick={() => void flush()} disabled={!hasSubstance}>
-            Save now
+        <div className="row editor-bar-actions">
+          <PreviewButton
+            postId={postId}
+            slug={draft.slug}
+            status={status}
+            publishedAt={publishedAt}
+            onBeforePreview={flush}
+          />
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={() => void flush()}
+            disabled={!hasSubstance}
+          >
+            Save
           </button>
-          <button type="button" onClick={() => void togglePublish()} disabled={!postId}>
+          <button
+            type="button"
+            className="btn btn--primary btn--small"
+            onClick={() => void togglePublish()}
+            disabled={!postId}
+          >
             {status === "published" ? "Unpublish" : "Publish"}
           </button>
-          <button type="button" onClick={() => void remove()} disabled={!postId}>
-            Delete
+          <button
+            type="button"
+            className="btn btn--quiet btn--small btn--danger"
+            onClick={() => void remove()}
+            disabled={!postId}
+          >
+            Trash
           </button>
         </div>
       </header>
@@ -331,6 +382,8 @@ export function PostEditor({
         </p>
       )}
 
+      <div className="editor-columns">
+        <div className="editor-main">
       <input
         className="title-input"
         aria-label="Title"
@@ -367,9 +420,23 @@ export function PostEditor({
         }}
       />
 
-      <section className="sidebar">
-        <h2>Details</h2>
+        </div>
 
+        <aside className="editor-sidebar" aria-label="Post settings">
+          <EditorSection title="Publish" defaultOpen summary={statusLabel}>
+            <PublishPanel
+              postId={postId}
+              status={status}
+              publishedAt={publishedAt}
+              onScheduleChange={setSchedule}
+            />
+          </EditorSection>
+
+          <EditorSection
+            title="Details"
+            defaultOpen
+            summary={tagSummary}
+          >
         <label>
           Excerpt
           <textarea
@@ -421,30 +488,27 @@ export function PostEditor({
             onChange={(url) => update("coverImageUrl", url)}
           />
         </div>
+          </EditorSection>
 
-        <PublishPanel
-          postId={postId}
-          status={status}
-          publishedAt={publishedAt}
-          onScheduleChange={setSchedule}
-        />
+          <EditorSection title="SEO" summary={seoSummary}>
+            <SeoPanel
+              fields={draft.seo}
+              fallbackTitle={draft.title}
+              fallbackDescription={draft.excerpt}
+              slug={draft.slug}
+              onChange={(key, value) =>
+                setDraft((current) => ({
+                  ...current,
+                  seo: { ...current.seo, [key]: value },
+                }))
+              }
+              onCommit={() => void flush()}
+            />
+          </EditorSection>
 
-        <SeoPanel
-          fields={draft.seo}
-          fallbackTitle={draft.title}
-          fallbackDescription={draft.excerpt}
-          slug={draft.slug}
-          onChange={(key, value) =>
-            setDraft((current) => ({
-              ...current,
-              seo: { ...current.seo, [key]: value },
-            }))
-          }
-          onCommit={() => void flush()}
-        />
-
-        <RevisionPanel postId={postId} onRestored={reloadAfterRestore} />
-      </section>
+          <RevisionPanel postId={postId} onRestored={reloadAfterRestore} />
+        </aside>
+      </div>
     </div>
   );
 }
