@@ -422,19 +422,31 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   grid-area: 1 / 1;
   justify-self: start;
   align-self: end;
-  /* Measured against the set text: the longer line reaches about 55% of the
-     column, so the figure starts inside it and overlaps the tail of both. */
-  margin-left: 42%;
-  width: min(30%, 18rem);
-  /* A tall cut-out would otherwise stretch the hero past the words it is
-     meant to be standing in front of. */
-  max-height: 34rem;
+  /*
+    Measured against the set text: the longer line reaches about 55% of the
+    column, so the figure starts inside it and overlaps the tail of both.
+
+    Sized for a full-length figure rather than a head and shoulders — at a
+    third of the column a whole standing person is too small to read as one.
+  */
+  margin-left: 36%;
+  width: min(38%, 23rem);
+  /* Bounded so a tall cut-out does not stretch the hero far past the words it
+     is meant to be standing in front of. */
+  max-height: 38rem;
   object-fit: contain;
   object-position: bottom;
   position: relative;
   z-index: 1;
   filter: grayscale(1) contrast(1.08);
   pointer-events: none;
+  /*
+    Multiply, so a cut-out saved on a white background composites instead of
+    punching a white rectangle through the words behind it. A transparent PNG
+    is still the better file — this is what keeps the page from breaking when
+    it is not one.
+  */
+  mix-blend-mode: multiply;
 }
 .about-hero--bare { min-height: 0; }
 

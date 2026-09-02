@@ -345,6 +345,13 @@ The stroked line is guarded by `@supports (-webkit-text-stroke: …)`. Without
 it, `color: transparent` alone would leave a blank space where the name should
 be — the failure mode is invisible text, not unstyled text.
 
+The portrait is composited with `mix-blend-mode: multiply`. A transparent PNG
+is the better file, but a cut-out saved on a white background is what people
+actually have, and drawn normally it punches a white rectangle straight
+through the words behind it — the greeting rendered as "HI, I'" and "NATE".
+Multiplied, white drops out and the figure darkens the type instead of
+erasing it, so either kind of file composites.
+
 The overlap is measured, not guessed: the reference this was adapted from uses
 long words that fill the line on their own, and a short greeting at the same
 proportion is several hundred pixels tall. The type is sized to the height the
