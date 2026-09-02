@@ -25,6 +25,7 @@ const LIBRARY = [
   { label: "Media", href: "/admin/media" },
   { label: "Series", href: "/admin/series" },
   { label: "Redirects", href: "/admin/redirects" },
+  { label: "Import", href: "/admin/import" },
 ] as const;
 
 export default function DashboardLayout({

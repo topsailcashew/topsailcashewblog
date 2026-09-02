@@ -3,3 +3,12 @@
 DATABASE_URL="postgresql://USER:PASSWORD@ep-xxxx-pooler.REGION.aws.neon.tech/neondb?sslmode=require"
 ADMIN_PASSWORD="change-me"
 SESSION_SECRET="change-me-to-32-plus-random-bytes"
+
+# --- Google Drive import (optional) -----------------------------------------
+# From the service account's JSON key file. Share the Drive folder with
+# GOOGLE_CLIENT_EMAIL as a Viewer, then set the folder id from its URL.
+# In production set these with `wrangler secret put`, not here.
+GOOGLE_CLIENT_EMAIL="importer@your-project.iam.gserviceaccount.com"
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n"
+GOOGLE_DRIVE_FOLDER_ID="1AbCdEfGhIjKlMnOpQrStUvWxYz"
+

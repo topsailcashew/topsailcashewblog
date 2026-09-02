@@ -1115,6 +1115,48 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .redirect-form input { display: block; width: 100%; margin-top: var(--s1); }
 .redirect-manager code { font-size: var(--text-xs); }
 
+/* --- drive import --------------------------------------------------------- */
+
+.drive-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  margin-block: var(--s4);
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+.drive-status .hint { margin-top: 0; max-width: 46rem; }
+.drive-import code, .drive-setup code { font-size: var(--text-xs); }
+
+.drive-steps {
+  margin: var(--s4) 0;
+  padding-left: var(--s5);
+  max-width: 46rem;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+.drive-steps li + li { margin-top: var(--s3); }
+.drive-steps pre {
+  margin-top: var(--s2);
+  padding: var(--s3);
+  background: var(--surface, #fafafa);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.drive-report { margin-top: var(--s5); }
+.drive-report .label { margin-top: var(--s5); }
+.drive-outcome { display: block; font-size: var(--text-sm); }
+.drive-outcome--created { color: var(--ok); }
+.drive-outcome--updated { color: var(--accent-ink); }
+.drive-outcome--failed { color: var(--danger); font-weight: 600; }
+.drive-outcome--unchanged, .drive-outcome--skipped-published { color: var(--fg-muted); }
+.drive-skipped { list-style: none; font-size: var(--text-sm); }
+.drive-skipped li { padding-block: var(--s1); }
+.drive-skipped .meta { display: inline; margin-left: var(--s2); }
+
 .row-actions { display: inline-flex; gap: var(--s2); justify-content: flex-end; }
 
 .post-rows { list-style: none; margin: var(--s5) 0 0; padding: 0; }

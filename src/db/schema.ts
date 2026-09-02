@@ -85,6 +85,18 @@ export const posts = pgTable(
      * deleted for real.
      */
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+
+    /*
+      Provenance for posts that arrived from Google Drive.
+
+      Not speculative: without it a second import cannot tell an already
+      imported document from a new one, and every run would create duplicate
+      drafts. `drive_modified_at` is Drive's own timestamp for the file as of
+      the last import, which is what makes "nothing has changed, skip it"
+      answerable without re-downloading and diffing every document.
+    */
+    driveFileId: text("drive_file_id").unique(),
+    driveModifiedAt: timestamp("drive_modified_at", { withTimezone: true }),
     /**
      * Maintained by Postgres, so it can never drift from the row.
      * Weighted A/B/C so a title match outranks a body match; the body is the
