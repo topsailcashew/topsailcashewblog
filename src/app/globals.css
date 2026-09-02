@@ -1153,7 +1153,14 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .drive-outcome--updated { color: var(--accent-ink); }
 .drive-outcome--failed { color: var(--danger); font-weight: 600; }
 .drive-outcome--unchanged, .drive-outcome--skipped-published { color: var(--fg-muted); }
-.drive-skipped { list-style: none; font-size: var(--text-sm); }
+/*
+  The last column here is a link to the post, not an action button, so it does
+  not want the table's right-aligned-actions convention.
+*/
+.drive-report .story-table td:last-child,
+.drive-report .story-table th:last-child { text-align: left; }
+
+.drive-skipped { list-style: none; padding-left: 0; font-size: var(--text-sm); }
 .drive-skipped li { padding-block: var(--s1); }
 .drive-skipped .meta { display: inline; margin-left: var(--s2); }
 
