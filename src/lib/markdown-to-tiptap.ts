@@ -323,9 +323,13 @@ function parseInline(
 
   const push = (value: string) => {
     if (value === "") return;
+    // A backslash escape means "this character is literal". The importers rely
+    // on it: text extracted from a .docx is escaped on the way in, so an
+    // asterisk someone typed does not come back as emphasis.
+    value = unescapeMarkdown(value);
     // A hard break is two trailing spaces or a backslash before a newline;
     // any other newline inside a paragraph is just a wrap.
-    const parts = value.split(/(?: {2,}|\\)\n/);
+    const parts = value.split(/(?: {2,})\n/);
     parts.forEach((part, i) => {
       if (i > 0) inline.push({ type: "hardBreak" });
       const flattened = part.replace(/\n/g, " ");
@@ -389,11 +393,15 @@ type Token = {
 
 /** The earliest inline token in `text`, or null when there is none. */
 function nextToken(text: string): Token | null {
+  /*
+    Every delimiter is guarded with a negative lookbehind for a backslash, so
+    an escaped `\*` is text rather than the start of emphasis.
+  */
   const patterns: { kind: Token["kind"]; re: RegExp }[] = [
-    { kind: "code", re: /(`+)([\s\S]*?[^`]?)\1(?!`)/ },
-    { kind: "strike", re: /~~([\s\S]+?)~~/ },
-    { kind: "bold", re: /(\*\*|__)([\s\S]+?)\1/ },
-    { kind: "italic", re: /(?<![*\w])([*_])(?!\s)([\s\S]+?)(?<!\s)\1(?![*\w])/ },
+    { kind: "code", re: /(?<!\\)(`+)([\s\S]*?[^`]?)\1(?!`)/ },
+    { kind: "strike", re: /(?<!\\)~~([\s\S]+?)~~/ },
+    { kind: "bold", re: /(?<!\\)(\*\*|__)([\s\S]+?)\1/ },
+    { kind: "italic", re: /(?<![*\w\\])([*_])(?!\s)([\s\S]+?)(?<!\s)\1(?![*\w])/ },
   ];
 
   let best: Token | null = findLinkOrImage(text);
@@ -425,7 +433,7 @@ function nextToken(text: string): Token | null {
  * sentence.
  */
 function findLinkOrImage(text: string): Token | null {
-  const opener = /(!?)\[((?:[^[\]\\]|\\.)*)\]/g;
+  const opener = /(?<!\\)(!?)\[((?:[^[\]\\]|\\.)*)\]/g;
 
   for (let match = opener.exec(text); match; match = opener.exec(text)) {
     const kind: Token["kind"] = match[1] === "!" ? "image" : "link";
@@ -500,6 +508,11 @@ function resolveTarget(
 }
 
 /* --- helpers -------------------------------------------------------------- */
+
+/** Removes the backslashes that were protecting literal punctuation. */
+function unescapeMarkdown(value: string): string {
+  return value.replace(/\\([\\`*_[\]#>~()!-])/g, "$1");
+}
 
 export function plainText(node: TiptapNode): string {
   if (node.type === "text") return node.text ?? "";

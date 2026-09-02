@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import type { ImportedItem } from "@/lib/import-documents";
 import {
-  IMPORTABLE_EXTENSIONS,
-  isImportableName,
-  type ImportedItem,
-} from "@/lib/import-documents";
+  ACCEPTED_DESCRIPTION,
+  prepareFile,
+  type Prepared,
+} from "@/lib/prepare-documents";
 
 /**
  * Drag a file or a folder in; it becomes a draft.
@@ -25,10 +26,14 @@ const BATCH_SIZE = 10;
 
 type Candidate = { path: string; file: File };
 
+type Ready = Extract<Prepared, { kind: "ready" }>;
+type Blocked = Extract<Prepared, { kind: "blocked" }>;
+type Ignored = Extract<Prepared, { kind: "ignored" }>;
+
 type Phase =
   | { kind: "idle" }
-  | { kind: "reading" }
-  | { kind: "ready"; candidates: Candidate[]; ignored: string[] }
+  | { kind: "reading"; done: number; total: number }
+  | { kind: "ready"; documents: Ready[]; blocked: Blocked[]; ignored: Ignored[] }
   | { kind: "importing"; done: number; total: number }
   | { kind: "done"; items: ImportedItem[] };
 
@@ -53,26 +58,41 @@ export function DropImport() {
     };
   }, []);
 
-  const accept = useCallback((found: Candidate[]) => {
-    const ignored = found
-      .filter((c) => !isImportableName(c.path))
-      .map((c) => c.path);
-    const candidates = found
-      .filter((c) => isImportableName(c.path))
+  /**
+   * Reads and converts everything, then shows what will happen.
+   *
+   * The extraction runs here rather than at import time so the preview is the
+   * truth: a .docx that cannot be parsed, or a .gdoc that holds no text, is
+   * seen before anything is sent rather than turning up as a failed row after.
+   */
+  const accept = useCallback(async (found: Candidate[]) => {
+    const capped = found
       .sort((a, b) => a.path.localeCompare(b.path))
       .slice(0, MAX_FILES);
 
-    if (candidates.length === 0) {
+    setError(null);
+    setPhase({ kind: "reading", done: 0, total: capped.length });
+
+    const prepared: Prepared[] = [];
+    for (const [index, candidate] of capped.entries()) {
+      prepared.push(...(await prepareFile(candidate.path, candidate.file)));
+      setPhase({ kind: "reading", done: index + 1, total: capped.length });
+    }
+
+    const documents = prepared.filter((p): p is Ready => p.kind === "ready");
+    const blocked = prepared.filter((p): p is Blocked => p.kind === "blocked");
+    const ignored = prepared.filter((p): p is Ignored => p.kind === "ignored");
+
+    if (documents.length === 0) {
       setPhase({ kind: "idle" });
       setError(
-        ignored.length > 0
-          ? `Nothing importable there. Looked for ${IMPORTABLE_EXTENSIONS.join(", ")} files.`
-          : "That folder appears to be empty.",
+        blocked.length > 0
+          ? `Nothing could be read. ${blocked[0].reason}`
+          : `Nothing importable there — looked for ${ACCEPTED_DESCRIPTION}.`,
       );
       return;
     }
-    setError(null);
-    setPhase({ kind: "ready", candidates, ignored });
+    setPhase({ kind: "ready", documents, blocked, ignored });
   }, []);
 
   const onDrop = useCallback(
@@ -80,10 +100,10 @@ export function DropImport() {
       event.preventDefault();
       setDragging(false);
       setError(null);
-      setPhase({ kind: "reading" });
+      setPhase({ kind: "reading", done: 0, total: 0 });
 
       try {
-        accept(await collectFromDrop(event.dataTransfer));
+        await accept(await collectFromDrop(event.dataTransfer));
       } catch (cause) {
         setPhase({ kind: "idle" });
         setError(cause instanceof Error ? cause.message : "Could not read that");
@@ -96,18 +116,17 @@ export function DropImport() {
     if (phase.kind !== "ready") return;
     // Captured before the phase changes, so a failure can restore this exact
     // selection rather than reconstructing it from a later state.
-    const { candidates, ignored } = phase;
+    const { documents: all, blocked, ignored } = phase;
 
     setError(null);
-    setPhase({ kind: "importing", done: 0, total: candidates.length });
+    setPhase({ kind: "importing", done: 0, total: all.length });
     const items: ImportedItem[] = [];
 
     try {
-      for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
-        const batch = candidates.slice(i, i + BATCH_SIZE);
-        const documents = await Promise.all(
-          batch.map(async (c) => ({ path: c.path, content: await c.file.text() })),
-        );
+      for (let i = 0; i < all.length; i += BATCH_SIZE) {
+        const documents = all
+          .slice(i, i + BATCH_SIZE)
+          .map((d) => ({ path: d.path, content: d.markdown }));
 
         const response = await fetch("/api/import", {
           method: "POST",
@@ -123,8 +142,8 @@ export function DropImport() {
         items.push(...body.items);
         setPhase({
           kind: "importing",
-          done: Math.min(i + BATCH_SIZE, candidates.length),
-          total: candidates.length,
+          done: Math.min(i + BATCH_SIZE, all.length),
+          total: all.length,
         });
       }
 
@@ -139,7 +158,7 @@ export function DropImport() {
       setPhase(
         items.length > 0
           ? { kind: "done", items }
-          : { kind: "ready", candidates, ignored },
+          : { kind: "ready", documents: all, blocked, ignored },
       );
     }
   }, [phase]);
@@ -161,7 +180,7 @@ export function DropImport() {
       >
         <p className="dropzone-lead">Drag files or folders here</p>
         <p className="hint">
-          {IMPORTABLE_EXTENSIONS.join(", ")} · subfolders are read too · up to{" "}
+          {ACCEPTED_DESCRIPTION} · subfolders and archives are opened · up to{" "}
           {MAX_FILES} files
         </p>
         <div className="row dropzone-actions">
@@ -185,10 +204,10 @@ export function DropImport() {
           ref={fileInput}
           type="file"
           multiple
-          accept={IMPORTABLE_EXTENSIONS.join(",")}
+          accept=".docx,.md,.markdown,.txt,.zip,.gdoc"
           hidden
           onChange={(e) => {
-            accept(fromFileList(e.target.files));
+            void accept(fromFileList(e.target.files));
             e.target.value = "";
           }}
         />
@@ -199,7 +218,7 @@ export function DropImport() {
           hidden
           // Not a React prop; set through the DOM in an effect below.
           onChange={(e) => {
-            accept(fromFileList(e.target.files));
+            void accept(fromFileList(e.target.files));
             e.target.value = "";
           }}
         />
@@ -219,11 +238,16 @@ export function DropImport() {
         </p>
       )}
 
-      {phase.kind === "reading" && <p className="hint">Reading…</p>}
+      {phase.kind === "reading" && (
+        <p className="hint" role="status">
+          Reading{phase.total > 0 ? ` ${phase.done} of ${phase.total}` : ""}…
+        </p>
+      )}
 
       {phase.kind === "ready" && (
         <Preview
-          candidates={phase.candidates}
+          documents={phase.documents}
+          blocked={phase.blocked}
           ignored={phase.ignored}
           onCancel={() => setPhase({ kind: "idle" })}
           onConfirm={() => void runImport()}
@@ -259,13 +283,15 @@ function DirectoryAttribute({
 }
 
 function Preview({
-  candidates,
+  documents,
+  blocked,
   ignored,
   onCancel,
   onConfirm,
 }: {
-  candidates: Candidate[];
-  ignored: string[];
+  documents: Ready[];
+  blocked: Blocked[];
+  ignored: Ignored[];
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -273,7 +299,7 @@ function Preview({
     <div className="import-preview">
       <div className="import-preview-head">
         <h2 className="label">
-          {candidates.length} document{candidates.length === 1 ? "" : "s"} ready
+          {documents.length} document{documents.length === 1 ? "" : "s"} ready
         </h2>
         <div className="row">
           <button type="button" className="btn btn--quiet btn--small" onClick={onCancel}>
@@ -286,18 +312,45 @@ function Preview({
       </div>
 
       <ul className="import-list">
-        {candidates.map((c) => (
-          <li key={c.path}>
-            <span className="import-list-path">{c.path}</span>
-            <span className="meta">{formatBytes(c.file.size)}</span>
+        {documents.map((document) => (
+          <li key={document.path}>
+            <span className="import-list-path">{document.path}</span>
+            {/* What was lost on the way in, said at the point it happened. */}
+            {document.notes.length > 0 && (
+              <span className="meta">{document.notes.join(" · ")}</span>
+            )}
           </li>
         ))}
       </ul>
 
+      {blocked.length > 0 && (
+        <>
+          <h2 className="label">Could not be read</h2>
+          <ul className="import-blocked">
+            {blocked.map((entry) => (
+              <li key={entry.path}>
+                <span className="import-list-path">{entry.path}</span>
+                <span className="meta">
+                  {entry.reason}
+                  {entry.url && (
+                    <>
+                      {" "}
+                      <a href={entry.url} target="_blank" rel="noopener noreferrer">
+                        Open in Google Docs ↗
+                      </a>
+                    </>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       {ignored.length > 0 && (
         <p className="hint">
           {ignored.length} other file{ignored.length === 1 ? "" : "s"} ignored —
-          only {IMPORTABLE_EXTENSIONS.join(", ")} can be read.
+          only {ACCEPTED_DESCRIPTION} can be read.
         </p>
       )}
     </div>
@@ -429,10 +482,4 @@ function fromFileList(files: FileList | null): Candidate[] {
     path: file.webkitRelativePath || file.name,
     file,
   }));
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

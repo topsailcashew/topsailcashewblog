@@ -389,8 +389,38 @@ and signals the end with an empty batch, so it is called in a loop — the
 obvious one-shot implementation silently truncates any folder with more than a
 hundred items in it.
 
-Only `.md`, `.markdown` and `.txt` are read. Anything else is counted and
-named as ignored rather than failing the drop.
+**What can be read.** `.md`, `.markdown` and `.txt` directly; `.docx` by
+extracting it; `.zip` by opening it and treating the contents as though they
+had been dropped. Anything else is counted and named as ignored rather than
+failing the drop.
+
+A `.docx` is a zip of XML, so both need an unzipper. There is no dependency for
+it: `DecompressionStream("deflate-raw")` is the inflater every current browser
+has, and the container format is a few structs — see `zip-reader.ts`. The
+central directory is read rather than the local headers scanned, because a
+local header may declare sizes of zero and defer them to a trailing
+descriptor, which a forward scan reads as an empty file.
+
+**`.docx` becomes Markdown**, not Tiptap JSON. The server already has a tested,
+hardened Markdown reader that clamps headings, filters link schemes and refuses
+anything the editor cannot represent; emitting Markdown means every imported
+document goes through that same door instead of the extractor becoming a
+second, unvalidated way to write `content_json`. Word's text is escaped on the
+way out and unescaped on the way back in, so an asterisk someone typed does not
+return as emphasis.
+
+Read from the document: headings (Word's `Title` and `HeadingN` styles,
+clamped to three levels), bold, italic, strikethrough, hyperlinks resolved
+through the relationships part, and lists — bulleted or numbered, with
+indentation, which needs `numbering.xml` as well since a `numId` only points
+at the definition carrying the format. Tables and images are named in the
+preview rather than dropped silently: the editor has no table node, and an
+image needs uploading rather than embedding.
+
+**A `.gdoc` is not a document.** Google Drive for Desktop writes a couple of
+hundred bytes of JSON holding the file's id; the text never leaves Google's
+servers. Nothing can be extracted locally, so it is reported with what to do
+instead — File → Download → Microsoft Word — and a link to open it.
 
 **Re-import rules.** A document is identified by its path within the drop
 (`essays/2026/slow-software.md`), stored in `posts.import_key`, so dropping the

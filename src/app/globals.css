@@ -1167,6 +1167,13 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 }
 .import-list li + li { border-top: 1px solid var(--border); }
 .import-list-path { overflow-wrap: anywhere; }
+.import-list .meta { flex: 0 0 auto; text-align: right; max-width: 55%; }
+
+.import-blocked { list-style: none; padding-left: 0; border: 1px solid var(--border); }
+.import-blocked li { padding: var(--s3); font-size: var(--text-sm); }
+.import-blocked li + li { border-top: 1px solid var(--border); }
+.import-blocked .meta { display: block; margin-top: var(--s1); }
+.import-blocked a { color: var(--accent-ink); }
 
 .import-report { margin-top: var(--s5); }
 /* The last column links to the draft; it is not an action button. */

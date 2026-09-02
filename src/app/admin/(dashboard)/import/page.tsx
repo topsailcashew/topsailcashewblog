@@ -9,9 +9,10 @@ export default function AdminImportPage() {
         <h1 className="admin-title">Import</h1>
       </div>
       <p className="hint">
-        Drop in Markdown or text files — one at a time, or a whole folder with
-        subfolders — and each becomes a draft here. Nothing is published;
-        drafts wait for you in Articles.
+        Drop in Word documents, Markdown or text — one at a time, a whole
+        folder, or a zip straight from Google Drive — and each becomes a draft
+        here, formatting and all. Nothing is published; drafts wait for you in
+        Articles.
       </p>
       <DropImport />
     </main>
