@@ -14,12 +14,16 @@ export function PublishPanel({
   postId,
   status,
   publishedAt,
+  featured,
   onScheduleChange,
+  onFeaturedChange,
 }: {
   postId: string | null;
   status: string;
   publishedAt: string | null;
+  featured: boolean;
   onScheduleChange: (isoOrNull: string | null) => void | Promise<void>;
+  onFeaturedChange: (value: boolean) => void;
 }) {
   const [linkState, setLinkState] = useState<
     { kind: "idle" } | { kind: "busy" } | { kind: "ready"; url: string } | { kind: "error"; message: string }
@@ -67,6 +71,19 @@ export function PublishPanel({
       <p className="hint">
         A future date holds the post back until then. Leave it empty to stamp
         the moment you publish.
+      </p>
+
+      <label className="publish-featured">
+        <input
+          type="checkbox"
+          checked={featured}
+          onChange={(event) => onFeaturedChange(event.target.checked)}
+        />
+        Lead the home page
+      </label>
+      <p className="hint">
+        The home page leads with the newest featured post, or simply the newest
+        post when nothing is marked.
       </p>
 
       <button

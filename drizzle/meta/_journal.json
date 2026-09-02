@@ -50,6 +50,13 @@
       "when": 1788341836916,
       "tag": "0006_add_import_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788353934336,
+      "tag": "0007_featured_post",
+      "breakpoints": true
     }
   ]
 }

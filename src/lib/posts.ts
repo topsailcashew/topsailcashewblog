@@ -26,6 +26,7 @@ export type SerializedPost = {
   canonical_url: string | null;
   noindex: boolean;
   og_image_url: string | null;
+  featured: boolean;
   deleted_at: string | null;
   tags: TagSummary[];
 };
@@ -286,6 +287,7 @@ type SeoInput = {
   canonical_url?: string | null;
   noindex?: boolean;
   og_image_url?: string | null;
+  featured?: boolean;
 };
 
 function seoValues(input: SeoInput) {
@@ -295,6 +297,7 @@ function seoValues(input: SeoInput) {
     canonicalUrl: emptyToNull(input.canonical_url),
     noindex: input.noindex ?? false,
     ogImageUrl: emptyToNull(input.og_image_url),
+    featured: input.featured ?? false,
   };
 }
 
@@ -310,6 +313,7 @@ function applySeo(patch: Partial<typeof posts.$inferInsert>, input: SeoInput) {
   if (input.og_image_url !== undefined) {
     patch.ogImageUrl = emptyToNull(input.og_image_url);
   }
+  if (input.featured !== undefined) patch.featured = input.featured;
 }
 
 async function applyPatch(
@@ -357,6 +361,7 @@ export function serializePost(row: PostRow, tags: TagSummary[]): SerializedPost 
     canonical_url: row.canonicalUrl,
     noindex: row.noindex,
     og_image_url: row.ogImageUrl,
+    featured: row.featured,
     deleted_at: toIso(row.deletedAt),
     tags,
   };

@@ -18,35 +18,33 @@ const NAV_LINKS = [
 ] as const;
 
 /**
- * Nav bar, matching the reference screenshots.
+ * Nav bar: the wordmark on the left, everything else on the right.
  *
  * The wordmark is the site name set in serif, lowercase, as one word — it
  * reads as an identity mark rather than a heading, which is why it does not
  * use the condensed display face the homepage hero does.
+ *
+ * The author's name used to sit on the right. On a single-author blog it said
+ * nothing the About page does not, and it competed with the nav for the one
+ * place a reader looks for navigation.
  */
 export function SiteNav() {
   return (
     <header className="nav">
-      <div className="nav-left">
-        <Link href="/" className="nav-mark">
-          {siteConfig.name}
-        </Link>
-        <nav className="nav-links" aria-label="Primary">
-          {NAV_LINKS.map((link) => (
-            <Link key={link.href} href={link.href}>
-              {link.label}
-            </Link>
-          ))}
-          <Link href="/search" className="nav-search" aria-label="Search">
-            <SearchIcon />
-          </Link>
-        </nav>
-      </div>
+      <Link href="/" className="nav-mark">
+        {siteConfig.name}
+      </Link>
 
-      <div className="nav-author">
-        <span className="nav-author-name">{siteConfig.author}</span>
-        <span className="nav-author-role">{siteConfig.authorRole}</span>
-      </div>
+      <nav className="nav-links" aria-label="Primary">
+        {NAV_LINKS.map((link) => (
+          <Link key={link.href} href={link.href}>
+            {link.label}
+          </Link>
+        ))}
+        <Link href="/search" className="nav-search" aria-label="Search">
+          <SearchIcon />
+        </Link>
+      </nav>
     </header>
   );
 }

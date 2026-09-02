@@ -75,6 +75,16 @@ export const posts = pgTable(
     canonicalUrl: text("canonical_url"),
     /** Keeps a live post out of search results without unpublishing it. */
     noindex: boolean("noindex").notNull().default(false),
+
+    /**
+     * Leads the home page.
+     *
+     * Not constrained to one row. A uniqueness rule would mean featuring a
+     * post is two writes that can half-fail; instead the newest featured post
+     * wins, so setting a new one is a single write and the old one simply
+     * stops being the most recent.
+     */
+    featured: boolean("featured").notNull().default(false),
     ogImageUrl: text("og_image_url"),
 
     /**

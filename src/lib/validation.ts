@@ -67,6 +67,8 @@ export const createPostSchema = z.object({
   canonical_url: z.union([z.url().max(2048), z.literal(""), z.null()]).optional(),
   noindex: z.boolean().optional(),
   og_image_url: nullableUrl,
+  /** Leads the home page. */
+  featured: z.boolean().optional(),
 });
 
 export const updatePostSchema = z
@@ -89,6 +91,8 @@ export const updatePostSchema = z
     canonical_url: z.union([z.url().max(2048), z.literal(""), z.null()]).optional(),
     noindex: z.boolean().optional(),
     og_image_url: nullableUrl,
+    /** Leads the home page. */
+    featured: z.boolean().optional(),
   })
   .refine(
     (body) => Object.keys(body).length > 0,

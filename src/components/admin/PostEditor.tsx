@@ -27,6 +27,7 @@ type Draft = {
   coverImageUrl: string | null;
   tags: string[];
   seriesId: string | null;
+  featured: boolean;
   contentJson: JSONContent;
   /* SEO overrides ride along with the autosave rather than saving on their
      own — they are ordinary content fields, not a state change like publish. */
@@ -41,6 +42,7 @@ function draftFromPost(post: SerializedPost | null): Draft {
     coverImageUrl: post?.cover_image_url ?? null,
     tags: post?.tags.map((tag) => tag.name) ?? [],
     seriesId: post?.series_id ?? null,
+    featured: post?.featured ?? false,
     contentJson: (post?.content_json as JSONContent | null) ?? EMPTY_DOC,
     seo: {
       metaTitle: post?.meta_title ?? "",
@@ -151,6 +153,10 @@ export function PostEditor({
       ? undefined
       : `${draft.tags.length} tag${draft.tags.length === 1 ? "" : "s"}`;
 
+  // Collapsed, the section still has to say that this post leads the home
+  // page — that is a site-wide effect, not a detail of this post.
+  const publishSummary = draft.featured ? `${statusLabel} · featured` : statusLabel;
+
   /** What the SEO section shows when collapsed, so overrides are not hidden. */
   const seoSummary = (() => {
     const set = [
@@ -177,6 +183,7 @@ export function PostEditor({
         cover_image_url: value.coverImageUrl,
         tags: value.tags,
         series_id: value.seriesId,
+        featured: value.featured,
         meta_title: value.seo.metaTitle.trim() || null,
         meta_description: value.seo.metaDescription.trim() || null,
         canonical_url: value.seo.canonicalUrl.trim() || null,
@@ -423,12 +430,17 @@ export function PostEditor({
         </div>
 
         <aside className="editor-sidebar" aria-label="Post settings">
-          <EditorSection title="Publish" defaultOpen summary={statusLabel}>
+          <EditorSection title="Publish" defaultOpen summary={publishSummary}>
             <PublishPanel
               postId={postId}
               status={status}
               publishedAt={publishedAt}
+              featured={draft.featured}
               onScheduleChange={setSchedule}
+              onFeaturedChange={(value) => {
+                update("featured", value);
+                void flush();
+              }}
             />
           </EditorSection>
 

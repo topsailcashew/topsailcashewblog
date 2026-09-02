@@ -277,6 +277,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   border-bottom: 1px solid var(--border);
 }
 .nav-left { display: flex; align-items: baseline; gap: var(--s6); min-width: 0; }
+/* The public nav is wordmark on the left, links pushed to the right. */
+.nav > .nav-links { margin-left: auto; }
 
 /* Serif, lowercase, one word — an identity mark, not a heading. */
 .nav-mark {
@@ -295,15 +297,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .nav-links a:hover { color: var(--accent-ink); }
 .nav-search { display: inline-flex; align-items: center; align-self: center; }
 
-.nav-author { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.35; text-align: right; }
-.nav-author-name { font-size: var(--text-sm); font-weight: 600; }
-.nav-author-role { font-size: var(--text-xs); color: var(--fg-muted); }
 
 @media (max-width: 46rem) {
   .nav { flex-wrap: wrap; row-gap: var(--s3); }
   .nav-left { width: 100%; justify-content: space-between; gap: var(--s4); }
   .nav-links { gap: var(--s4); }
-  .nav-author { align-items: flex-start; text-align: left; }
 }
 
 .reading-shell { min-height: 100vh; display: flex; flex-direction: column; }
@@ -407,6 +405,72 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
     opacity: 0;
   }
 }
+
+/* --- featured post -------------------------------------------------------- */
+
+.featured {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--s6);
+  align-items: center;
+  /* No rule of its own: the categories row below already carries a
+     border-top, and the two together read as a mistake. */
+  padding-bottom: var(--s6);
+}
+/* Without art there is no second column to balance; one measure reads better
+   than a half-empty grid. */
+.featured--text { grid-template-columns: minmax(0, 1fr); max-width: 46rem; }
+
+@media (max-width: 54rem) {
+  .featured { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+}
+
+.featured-figure { display: block; margin: 0; }
+.featured-figure img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+.featured-body { display: flex; flex-direction: column; align-items: flex-start; }
+.featured-top {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+
+.featured-title {
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  /* Bigger than a card title, smaller than the masthead — it leads the page
+     without competing with the wordmark above it. */
+  font-size: clamp(1.75rem, 4.2vw, 3rem);
+  margin: 0;
+}
+.featured-title a { color: var(--fg); text-decoration: none; }
+.featured-title a:hover { color: var(--accent-ink); }
+
+.featured-excerpt {
+  margin-top: var(--s3);
+  font-size: var(--text-body);
+  line-height: 1.55;
+  color: var(--fg-muted);
+  max-width: 34rem;
+}
+.featured-meta { margin-top: var(--s4); }
+.featured-more {
+  margin-top: var(--s4);
+  font-family: var(--sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--accent-ink);
+  text-decoration: none;
+}
+.featured-more:hover { text-decoration: underline; }
 
 .categories {
   display: flex;
@@ -976,12 +1040,14 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   color: var(--fg-muted);
   line-height: 1.45;
 }
+.publish-featured,
 .seo-checkbox {
   display: flex !important;
   align-items: center;
   gap: var(--s2);
   margin-top: var(--s4);
 }
+.publish-featured input,
 .seo-checkbox input { width: auto !important; margin: 0 !important; }
 
 /* --- trash ---------------------------------------------------------------- */

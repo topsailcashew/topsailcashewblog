@@ -328,6 +328,23 @@ surprise than a name being briefly unavailable.
 
 Emptying the trash is the only genuinely irreversible action in the admin.
 
+### The featured post
+
+The home page leads with the newest post marked `featured`, or — when nothing
+is marked — simply the newest post. That fallback is the point: the page
+should never have a hole in it because a box has not been ticked, and on a
+blog where nothing is ever featured, the newest post is the right thing to
+lead with anyway.
+
+Nothing constrains the column to a single row. A uniqueness rule would make
+featuring a post two writes that can half-fail; instead the newest featured
+post wins, so setting a new one is one write and the previous one simply stops
+being the most recent.
+
+The lead post is filtered out of the grid beneath it — the same post twice on
+one screen reads as a duplicate rather than as emphasis — and the whole filter
+row is skipped when it was the only post there was.
+
 ### Per-post SEO
 
 Five nullable columns, each an override with a derived fallback, so a post
@@ -765,7 +782,7 @@ posts           id, title, slug, content_json, content_html, excerpt,
                 series_id, search_vector,
                 meta_title, meta_description, canonical_url, noindex,
                 og_image_url, deleted_at,
-                import_key, imported_at
+                featured, import_key, imported_at
 tags            id, name, slug
 post_tags       post_id, tag_id                    (composite pk)
 media           id, r2_key, url, alt_text, filename, content_type,

@@ -266,6 +266,32 @@ export async function getRelatedPosts(
  * crawler not to index it is a contradiction, and Search Console reports it as
  * an error rather than quietly obeying the meta tag.
  */
+/**
+ * The post that leads the home page.
+ *
+ * The newest one marked featured, or — when nothing is marked — the newest
+ * post there is. That fallback matters: the home page should never have a
+ * hole in it because a box has not been ticked, and on a blog where nothing
+ * is ever featured the newest post is the right thing to lead with anyway.
+ */
+export async function getFeaturedPost(db: BlogDatabase): Promise<PostSummary | null> {
+  const pick = async (onlyFeatured: boolean) => {
+    const [row] = await db
+      .select()
+      .from(posts)
+      .where(onlyFeatured ? and(publishedOnly, eq(posts.featured, true)) : publishedOnly)
+      .orderBy(...publishedOrder)
+      .limit(1);
+    return row ?? null;
+  };
+
+  const row = (await pick(true)) ?? (await pick(false));
+  if (!row) return null;
+
+  const tags = (await getTagsForPosts(db, [row.id])).get(row.id) ?? [];
+  return toSummary(serializePost(row, tags));
+}
+
 export async function listIndexableForSitemap(
   db: BlogDatabase,
 ): Promise<SerializedPost[]> {
