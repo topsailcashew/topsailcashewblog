@@ -467,25 +467,33 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .about-prose { margin-top: var(--s6); }
 
 @media (max-width: 46rem) {
-  /* The portrait stops overlapping and simply follows the words: at this
-     width it covers too much of them to leave either legible. */
   .about-hero { display: block; }
-  .about-statement { font-size: min(30cqw, 32vh); }
+
+  /* Filling the width, not the height: a phone is narrow enough that the type
+     can run edge to edge, which is what makes the greeting read as a poster
+     rather than a headline. */
+  .about-statement { font-size: 40cqw; }
+
   .about-portrait {
     /*
-      Back into flow. Absolute is what lets the figure stand over the words on
-      a wide screen; left in place here it escapes the hero and lands on top
-      of the buttons below it.
+      In flow, but pulled up over the words.
+
+      Absolute positioning is what lets the figure stand over the type on a
+      wide screen; here it would escape the hero and land on the buttons. A
+      negative top margin overlaps the same way while the hero still grows to
+      contain the figure, so everything below it stays put. Relative + z-index
+      keeps it painting in front of the letters.
     */
-    position: static;
+    position: relative;
+    z-index: 1;
     display: block;
-    /* Bounded by height: a portrait-shaped cut-out at full width is most of a
-       screen to scroll past before the buttons. */
     height: auto;
-    width: auto;
-    max-width: 62%;
-    max-height: 38vh;
-    margin: var(--s4) 0 0 auto;
+    width: 72%;
+    max-width: none;
+    max-height: none;
+    /* Proportional to the width, so the overlap holds as the screen changes. */
+    margin: -13% auto 0;
+    object-fit: contain;
   }
   .about-under { align-items: flex-start; }
 }

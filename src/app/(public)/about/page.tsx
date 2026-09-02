@@ -54,7 +54,7 @@ export default async function AboutPage() {
         */}
         <h1 className="about-statement">
           <span className="about-line">Hi, I&rsquo;m</span>
-          <span className="about-line about-line--outline">Nate.</span>
+          <span className="about-line about-line--outline">Nate!</span>
         </h1>
 
         {page.cover_image_url && (
