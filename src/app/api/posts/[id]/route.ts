@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getDb } from "@/db/client";
 import { handle, json, notFound, readJsonBody } from "@/lib/http";
-import { deletePost, getPostById, updatePost } from "@/lib/posts";
+import { getPostById, purgePost, trashPost, updatePost } from "@/lib/posts";
 import { affectsPublicOutput, revalidatePublicPages } from "@/lib/revalidate";
 import { updatePostSchema, uuidSchema } from "@/lib/validation";
 
@@ -26,7 +26,7 @@ export const GET = handle(async (_request: NextRequest, context: RouteContext) =
   return json({ post });
 });
 
-/** PATCH /api/posts/:id — title, content, excerpt, cover, tags, status, slug. */
+/** PATCH /api/posts/:id — title, content, excerpt, cover, tags, status, slug, SEO. */
 export const PATCH = handle(async (request: NextRequest, context: RouteContext) => {
   const id = await postId(context);
   const body = updatePostSchema.parse(await readJsonBody(request));
@@ -45,14 +45,22 @@ export const PATCH = handle(async (request: NextRequest, context: RouteContext) 
   return json({ post });
 });
 
-/** DELETE /api/posts/:id */
-export const DELETE = handle(async (_request: NextRequest, context: RouteContext) => {
+/**
+ * DELETE /api/posts/:id — moves the post to the trash.
+ *
+ * `?permanent=1` deletes the row for real, which is what the trash view's
+ * "Delete permanently" does. Defaulting to the recoverable action means a
+ * mistaken call, from anywhere, is undoable.
+ */
+export const DELETE = handle(async (request: NextRequest, context: RouteContext) => {
   const id = await postId(context);
   const db = getDb();
+  const permanent = new URL(request.url).searchParams.get("permanent") === "1";
 
   // Read it first: once it is gone we cannot know which URLs it occupied.
   const existing = await getPostById(db, id);
-  await deletePost(db, id);
+  if (permanent) await purgePost(db, id);
+  else await trashPost(db, id);
 
   if (existing) {
     await revalidatePublicPages(db, {

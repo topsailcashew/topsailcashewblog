@@ -24,6 +24,8 @@ export default function DashboardLayout({
             <Link href="/admin/comments">Comments</Link>
             <Link href="/admin/series">Series</Link>
             <Link href="/admin/pages">Pages</Link>
+            <Link href="/admin/media">Media</Link>
+            <Link href="/admin/redirects">Redirects</Link>
           </span>
         </div>
         <div className="nav-author">

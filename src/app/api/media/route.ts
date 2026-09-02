@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getDb } from "@/db/client";
 import { ApiError, handle, json } from "@/lib/http";
-import { listMedia, uploadMedia } from "@/lib/media";
+import { countMedia, listMedia, uploadMedia } from "@/lib/media";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { getMediaBucket } from "@/lib/r2";
 
@@ -42,7 +42,16 @@ export const POST = handle(async (request: NextRequest) => {
   return json({ media: uploaded }, 201);
 });
 
-/** GET /api/media — recent uploads, newest first. */
-export const GET = handle(async () => {
-  return json({ media: await listMedia(getDb()) });
+/** GET /api/media — recent uploads, newest first. `?q=` searches, `?offset=`. */
+export const GET = handle(async (request: NextRequest) => {
+  const params = new URL(request.url).searchParams;
+  const limit = Math.min(Number(params.get("limit") ?? 60) || 60, 200);
+  const offset = Math.max(Number(params.get("offset") ?? 0) || 0, 0);
+  const search = params.get("q") ?? undefined;
+
+  const [items, total] = await Promise.all([
+    listMedia(getDb(), limit, { search, offset }),
+    countMedia(getDb()),
+  ]);
+  return json({ media: items, total });
 });

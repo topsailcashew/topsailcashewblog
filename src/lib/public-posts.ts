@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
 import { postTags, posts, series, tags } from "@/db/schema";
 import { serializePost, type SerializedPost } from "./posts";
@@ -16,13 +16,20 @@ import { getTagsForPosts } from "./tags";
 export const POSTS_PER_PAGE = 12;
 
 /*
-  Published *and* due. A post whose published_at is in the future is scheduled:
-  it exists, the admin can see it, and it appears here the moment the time
-  passes — see the note on revalidation in the README.
+  Published, due, and not in the trash.
+
+  A post whose published_at is in the future is scheduled: it exists, the admin
+  can see it, and it appears here the moment the time passes — see the note on
+  revalidation in the README. A trashed post is gone as far as every reader is
+  concerned, but the row survives until the trash is emptied.
+
+  This is the only place those three conditions are written. Every public query
+  in this file composes it, so none of them can forget one.
 */
 const publishedOnly = and(
   eq(posts.status, "published"),
   sql`${posts.publishedAt} <= now()`,
+  isNull(posts.deletedAt),
 );
 
 /** Newest first. `published_at` is always set once a post has been published. */
@@ -252,6 +259,24 @@ export async function getRelatedPosts(
 }
 
 /** Full published posts, newest first — the RSS feed's source. */
+/**
+ * Posts eligible for the sitemap.
+ *
+ * `noindex` posts are excluded: listing a URL in the sitemap while telling the
+ * crawler not to index it is a contradiction, and Search Console reports it as
+ * an error rather than quietly obeying the meta tag.
+ */
+export async function listIndexableForSitemap(
+  db: BlogDatabase,
+): Promise<SerializedPost[]> {
+  const rows = await db
+    .select()
+    .from(posts)
+    .where(and(publishedOnly, eq(posts.noindex, false)))
+    .orderBy(...publishedOrder);
+  return rows.map((row) => serializePost(row, []));
+}
+
 export async function listPublishedForFeed(
   db: BlogDatabase,
   limit = 50,

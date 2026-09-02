@@ -61,6 +61,12 @@ export const createPostSchema = z.object({
   tags: tagsSchema,
   series_id: z.uuid().nullable().optional(),
   published_at: z.iso.datetime().nullable().optional(),
+  /* Per-post SEO overrides. Each falls back to a derived value when null. */
+  meta_title: z.string().trim().max(200).nullable().optional(),
+  meta_description: z.string().trim().max(400).nullable().optional(),
+  canonical_url: z.union([z.url().max(2048), z.literal(""), z.null()]).optional(),
+  noindex: z.boolean().optional(),
+  og_image_url: nullableUrl,
 });
 
 export const updatePostSchema = z
@@ -77,14 +83,29 @@ export const updatePostSchema = z
     /* A future value schedules the post; the public queries hide it until
        the moment passes. */
     published_at: z.iso.datetime().nullable().optional(),
+    /* Per-post SEO overrides. Each falls back to a derived value when null. */
+    meta_title: z.string().trim().max(200).nullable().optional(),
+    meta_description: z.string().trim().max(400).nullable().optional(),
+    canonical_url: z.union([z.url().max(2048), z.literal(""), z.null()]).optional(),
+    noindex: z.boolean().optional(),
+    og_image_url: nullableUrl,
   })
   .refine(
     (body) => Object.keys(body).length > 0,
     "Provide at least one field to update",
   );
 
+/*
+  What the admin list can be filtered by. Deliberately *not* added to
+  POST_STATUSES: trash is orthogonal to draft/published — a trashed post keeps
+  the status it had — and widening the status enum would loosen the check
+  constraint on the column for the sake of a query parameter.
+*/
+export const POST_LIST_FILTERS = [...POST_STATUSES, "trash"] as const;
+export type PostListFilter = (typeof POST_LIST_FILTERS)[number];
+
 export const listPostsQuerySchema = z.object({
-  status: z.enum(POST_STATUSES).optional(),
+  status: z.enum(POST_LIST_FILTERS).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });

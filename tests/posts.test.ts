@@ -401,11 +401,39 @@ describe("posts API", { skip: hasDatabase ? false : "TEST_DATABASE_URL not set" 
   });
 
   describe("DELETE /api/posts/:id", () => {
-    it("deletes the post and its tag links", async () => {
+    it("moves the post to the trash and out of the list", async () => {
       const created = await create({ title: "Temporary", tags: ["Ephemera"] });
 
       const response = await deletePost(
         new NextRequest(`${BASE}/api/posts/${created.id}`, { method: "DELETE" }),
+        ctx(created.id),
+      );
+      assert.equal(response.status, 204);
+
+      // The row survives — that is the point of the trash — but nothing that
+      // lists posts should show it.
+      const after = await getPost(
+        new NextRequest(`${BASE}/api/posts/${created.id}`),
+        ctx(created.id),
+      );
+      assert.equal(after.status, 200);
+      const { post } = await bodyOf<{ post: SerializedPost }>(after);
+      assert.ok(post.deleted_at !== null);
+      assert.deepEqual(post.tags.map((tag) => tag.name), ["Ephemera"]);
+
+      const remaining = await bodyOf<{ posts: SerializedPost[] }>(
+        await listPosts(list()),
+      );
+      assert.equal(remaining.posts.length, 0);
+    });
+
+    it("deletes for good with ?permanent=1", async () => {
+      const created = await create({ title: "Temporary", tags: ["Ephemera"] });
+
+      const response = await deletePost(
+        new NextRequest(`${BASE}/api/posts/${created.id}?permanent=1`, {
+          method: "DELETE",
+        }),
         ctx(created.id),
       );
       assert.equal(response.status, 204);
@@ -415,11 +443,6 @@ describe("posts API", { skip: hasDatabase ? false : "TEST_DATABASE_URL not set" 
         ctx(created.id),
       );
       assert.equal(after.status, 404);
-
-      const remaining = await bodyOf<{ posts: SerializedPost[] }>(
-        await listPosts(list()),
-      );
-      assert.equal(remaining.posts.length, 0);
     });
 
     it("404s when the post does not exist", async () => {

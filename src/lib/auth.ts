@@ -54,6 +54,10 @@ function isPagesApi(pathname: string): boolean {
   return pathname === "/api/pages" || pathname.startsWith("/api/pages/");
 }
 
+function isRedirectsApi(pathname: string): boolean {
+  return pathname === "/api/redirects" || pathname.startsWith("/api/redirects/");
+}
+
 function isAdminRoute(pathname: string): boolean {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
@@ -82,6 +86,7 @@ export function isProtected(pathname: string, method: string): boolean {
     isAdminRoute(pathname) ||
     isPostsApi(pathname) ||
     isPagesApi(pathname) ||
+    isRedirectsApi(pathname) ||
     isMediaApi(pathname) ||
     isCommentsApi(pathname) ||
     isSeriesApi(pathname)

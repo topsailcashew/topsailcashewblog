@@ -19,19 +19,24 @@ export function articleJsonLd(post: SerializedPost): string {
   return JSON.stringify({
     "@context": "https://schema.org",
     "@type": "BlogPosting",
-    headline: post.title,
-    description: post.excerpt ?? siteConfig.description,
+    headline: post.meta_title ?? post.title,
+    description: post.meta_description ?? post.excerpt ?? siteConfig.description,
     url: absoluteUrl(`/${post.slug}`),
-    mainEntityOfPage: { "@type": "WebPage", "@id": absoluteUrl(`/${post.slug}`) },
+    // Matches the canonical in the head — a republication points both at the
+    // original, so a crawler is never told two different things.
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": post.canonical_url ?? absoluteUrl(`/${post.slug}`),
+    },
     datePublished: published,
     dateModified: post.updated_at,
     inLanguage: siteConfig.language,
     keywords: post.tags.map((tag) => tag.name),
     wordCount: wordCount(post.content_html),
     timeRequired: `PT${readingMinutes(post.content_html)}M`,
-    image: post.cover_image_url
-      ? [toAbsolute(post.cover_image_url)]
-      : [absoluteUrl(`/og/${post.slug}.png`)],
+    image: [
+      toAbsolute(post.og_image_url ?? post.cover_image_url ?? `/og/${post.slug}.png`),
+    ],
     author: author(),
     publisher: { "@type": "Person", name: siteConfig.author },
   });

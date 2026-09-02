@@ -2,6 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
 import { pages, type PageRow, type PostStatus } from "@/db/schema";
 import { notFound } from "./http";
+import { recordSlugChange } from "./redirects";
 import { slugify, withUniqueSlug } from "./slug";
 import type { CreatePageInput, UpdatePageInput } from "./validation";
 
@@ -128,6 +129,10 @@ export async function updatePage(
       : Object.keys(patch).length > 0
         ? await applyPatch(db, id, patch)
         : existing;
+
+  if (row.slug !== existing.slug) {
+    await recordSlugChange(db, `/${existing.slug}`, `/${row.slug}`);
+  }
 
   return { page: serializePage(row), previousSlug: existing.slug };
 }

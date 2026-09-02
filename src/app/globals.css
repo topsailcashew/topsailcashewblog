@@ -890,12 +890,184 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 }
 .revision-list .btn { grid-column: 2; grid-row: 1 / span 2; }
 
+/* --- SEO panel ------------------------------------------------------------ */
+
+.seo-panel { margin-top: var(--s5); }
+.seo-flag { color: var(--accent-ink); margin-left: var(--s1); }
+.hint--warn { color: var(--accent-ink); }
+
+/* A rough stand-in for a search result, so the fields have a visible effect. */
+.seo-preview {
+  display: block;
+  margin: var(--s3) 0 var(--s4);
+  padding: var(--s3);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.seo-preview-url { display: block; font-size: var(--text-xs); color: var(--fg-muted); }
+.seo-preview-title {
+  display: block;
+  margin-top: var(--s1);
+  font-size: var(--text-sm);
+  color: #1a0dab;
+  line-height: 1.3;
+}
+.seo-preview-description {
+  display: block;
+  margin-top: var(--s1);
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+  line-height: 1.45;
+}
+.seo-checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: var(--s2);
+  margin-top: var(--s4);
+}
+.seo-checkbox input { width: auto !important; margin: 0 !important; }
+
+/* --- trash ---------------------------------------------------------------- */
+
+.trash-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  margin-bottom: var(--s5);
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+.trash-bar .hint { margin-top: 0; max-width: 46rem; }
+
+/* --- media library -------------------------------------------------------- */
+
+.media-library {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20rem;
+  gap: var(--s6);
+  align-items: start;
+}
+@media (max-width: 60rem) { .media-library { grid-template-columns: minmax(0, 1fr); } }
+
+.media-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-bottom: var(--s4);
+}
+.media-search { flex: 1 1 16rem; height: var(--control-h); }
+.media-upload { cursor: pointer; }
+
+/*
+  Named apart from the dashboard's `.media-grid`, which is a different thing:
+  a fixed 3-up strip of recent thumbnails. Sharing the class meant whichever
+  rule came second in the file silently won for both screens.
+*/
+.media-library-grid {
+  grid-column: 1;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--s3);
+}
+
+.media-tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+.media-tile:hover, .media-tile:focus-visible { border-color: var(--fg); }
+.media-tile.is-active { border-color: var(--accent); border-width: 2px; }
+.media-tile img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.media-tile-name {
+  display: block;
+  padding: var(--s2);
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Missing alt text is worth seeing at a glance across the whole grid. */
+.media-tile-warn {
+  position: absolute;
+  top: var(--s2);
+  right: var(--s2);
+  padding: 0 var(--s2);
+  background: var(--accent);
+  color: #0a0a0a;
+  font-size: var(--text-xs);
+}
+
+.media-detail {
+  grid-column: 2;
+  position: sticky;
+  top: var(--s4);
+  padding: var(--s4);
+  border: 1px solid var(--border);
+}
+@media (max-width: 60rem) { .media-detail { grid-column: 1; position: static; } }
+.media-detail-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.media-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+.media-detail-image {
+  display: block;
+  width: 100%;
+  max-height: 14rem;
+  object-fit: contain;
+  background: var(--surface, #f5f5f5);
+  margin-bottom: var(--s3);
+}
+.media-detail label { display: block; margin-top: var(--s3); font-size: var(--text-xs); color: var(--fg-muted); }
+.media-detail input, .media-detail textarea { display: block; width: 100%; margin-top: var(--s1); }
+.media-usage { margin: var(--s4) 0; }
+.media-usage-list { list-style: none; font-size: var(--text-sm); }
+.media-usage-list li { padding-block: var(--s1); }
+
+/* --- redirects ------------------------------------------------------------ */
+
+.redirect-form {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-block: var(--s4);
+}
+.redirect-form label { font-size: var(--text-xs); color: var(--fg-muted); flex: 1 1 14rem; }
+.redirect-form input { display: block; width: 100%; margin-top: var(--s1); }
+.redirect-manager code { font-size: var(--text-xs); }
+
 .row-actions { display: inline-flex; gap: var(--s2); justify-content: flex-end; }
 
 .post-rows { list-style: none; margin: var(--s5) 0 0; padding: 0; }
 .post-rows > li { padding-block: var(--s4); border-bottom: 1px solid var(--border); }
 .post-rows > li:first-child { padding-top: 0; }
-.post-row-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s3); }
+/*
+  Title, status, then actions. `space-between` alone stranded the status badge
+  in the middle of the row once row actions were added as a third child, so
+  the status sits with the title and only the actions are pushed right.
+*/
+.post-row-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s3); }
+.post-row-head > .row-actions { margin-left: auto; }
 .post-row-title { font-family: var(--serif); font-size: var(--text-lg); font-weight: 600; text-decoration: none; }
 .post-row-title:hover { color: var(--accent-ink); }
 

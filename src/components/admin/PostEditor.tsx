@@ -12,6 +12,7 @@ import { isImageFile, uploadImage } from "@/lib/upload-client";
 import { CoverImagePicker } from "./CoverImagePicker";
 import { PublishPanel } from "./PublishPanel";
 import { RevisionPanel } from "./RevisionPanel";
+import { SeoPanel, type SeoFields } from "./SeoPanel";
 import { SaveStatus } from "./SaveStatus";
 import { TagInput } from "./TagInput";
 
@@ -24,6 +25,9 @@ type Draft = {
   tags: string[];
   seriesId: string | null;
   contentJson: JSONContent;
+  /* SEO overrides ride along with the autosave rather than saving on their
+     own — they are ordinary content fields, not a state change like publish. */
+  seo: SeoFields;
 };
 
 function draftFromPost(post: SerializedPost | null): Draft {
@@ -35,6 +39,13 @@ function draftFromPost(post: SerializedPost | null): Draft {
     tags: post?.tags.map((tag) => tag.name) ?? [],
     seriesId: post?.series_id ?? null,
     contentJson: (post?.content_json as JSONContent | null) ?? EMPTY_DOC,
+    seo: {
+      metaTitle: post?.meta_title ?? "",
+      metaDescription: post?.meta_description ?? "",
+      canonicalUrl: post?.canonical_url ?? "",
+      noindex: post?.noindex ?? false,
+      ogImageUrl: post?.og_image_url ?? "",
+    },
   };
 }
 
@@ -137,6 +148,11 @@ export function PostEditor({
         cover_image_url: value.coverImageUrl,
         tags: value.tags,
         series_id: value.seriesId,
+        meta_title: value.seo.metaTitle.trim() || null,
+        meta_description: value.seo.metaDescription.trim() || null,
+        canonical_url: value.seo.canonicalUrl.trim() || null,
+        noindex: value.seo.noindex,
+        og_image_url: value.seo.ogImageUrl.trim() || null,
       };
 
       const id = postIdRef.current;
@@ -411,6 +427,20 @@ export function PostEditor({
           status={status}
           publishedAt={publishedAt}
           onScheduleChange={setSchedule}
+        />
+
+        <SeoPanel
+          fields={draft.seo}
+          fallbackTitle={draft.title}
+          fallbackDescription={draft.excerpt}
+          slug={draft.slug}
+          onChange={(key, value) =>
+            setDraft((current) => ({
+              ...current,
+              seo: { ...current.seo, [key]: value },
+            }))
+          }
+          onCommit={() => void flush()}
         />
 
         <RevisionPanel postId={postId} onRestored={reloadAfterRestore} />

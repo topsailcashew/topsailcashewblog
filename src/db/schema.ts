@@ -3,6 +3,7 @@ import {
   check,
   customType,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -60,6 +61,30 @@ export const posts = pgTable(
     seriesId: uuid("series_id").references(() => series.id, {
       onDelete: "set null",
     }),
+
+    /*
+      Per-post SEO overrides. All nullable, and all fall back to what the page
+      already derives — meta_title to the title, meta_description to the
+      excerpt, og_image_url to the cover then the generated card. Kept as
+      overrides rather than required fields so nothing has to be filled in for
+      a post to be correct.
+    */
+    metaTitle: text("meta_title"),
+    metaDescription: text("meta_description"),
+    /** Absolute URL, for a post that is a republication of something else. */
+    canonicalUrl: text("canonical_url"),
+    /** Keeps a live post out of search results without unpublishing it. */
+    noindex: boolean("noindex").notNull().default(false),
+    ogImageUrl: text("og_image_url"),
+
+    /**
+     * Trash, not deletion.
+     *
+     * Set instead of removing the row, and filtered out of every query. The
+     * admin can restore until the trash is emptied, at which point the row is
+     * deleted for real.
+     */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     /**
      * Maintained by Postgres, so it can never drift from the row.
      * Weighted A/B/C so a title match outranks a body match; the body is the
@@ -84,6 +109,9 @@ export const posts = pgTable(
     check("posts_status_check", sql`${table.status} in ('draft', 'published')`),
     index("posts_series_idx").on(table.seriesId),
     index("posts_search_idx").using("gin", table.searchVector),
+    // Drives the trash view and, more importantly, keeps the "not trashed"
+    // predicate on every other query cheap.
+    index("posts_deleted_at_idx").on(table.deletedAt),
   ],
 );
 
@@ -110,19 +138,57 @@ export const postTags = pgTable(
 );
 
 /**
- * Media rows are written by the Phase 2 R2 upload flow. `r2Key` is the object
- * key inside the bucket; `url` is the public (or signed) URL we serve.
- * Deliberately not joined to posts yet — inline images live in content_json.
+ * Media rows are written by the R2 upload flow. `r2Key` is the object key
+ * inside the bucket; `url` is the public (or signed) URL we serve.
+ *
+ * Deliberately not joined to posts. An image can be referenced from a cover,
+ * from inline HTML, or from a page, and a join table would have to be kept in
+ * step with the editor on every keystroke. The library answers "where is this
+ * used?" by searching for the URL instead — see `findMediaUsage`, which is a
+ * scan the size of this blog can afford and a foreign key cannot go stale.
  */
-export const media = pgTable("media", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  r2Key: text("r2_key").notNull(),
-  url: text("url").notNull(),
-  altText: text("alt_text"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const media = pgTable(
+  "media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    r2Key: text("r2_key").notNull(),
+    url: text("url").notNull(),
+    altText: text("alt_text"),
+    /** Original upload name, so the library is searchable by what you called it. */
+    filename: text("filename"),
+    contentType: text("content_type"),
+    sizeBytes: integer("size_bytes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("media_created_at_idx").on(table.createdAt.desc())],
+);
+
+/**
+ * Permanent redirects from a URL this site used to serve.
+ *
+ * Written automatically when a post or page slug changes, and editable by
+ * hand. Without this a rename silently 404s every inbound link, share and
+ * search result that pointed at the old address — the rename itself is one
+ * line, and this is the other half of it.
+ */
+export const redirects = pgTable(
+  "redirects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Site-relative, leading slash, no query: "/old-post". */
+    fromPath: text("from_path").notNull().unique(),
+    /** Site-relative or absolute. */
+    toPath: text("to_path").notNull(),
+    /** True when a slug change created this rather than a person. */
+    automatic: boolean("automatic").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("redirects_from_idx").on(table.fromPath)],
+);
 
 /**
  * Point-in-time snapshots of a post, for recovery.
@@ -252,8 +318,10 @@ export const schema = {
   comments,
   postRevisions,
   pages,
+  redirects,
 };
 
+export type RedirectRow = typeof redirects.$inferSelect;
 export type SeriesRow = typeof series.$inferSelect;
 export type PageRow = typeof pages.$inferSelect;
 export type PostRevisionRow = typeof postRevisions.$inferSelect;

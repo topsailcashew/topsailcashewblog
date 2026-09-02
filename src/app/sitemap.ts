@@ -3,7 +3,7 @@ import { getDb } from "@/db/client";
 import { listPublishedPageSlugs } from "@/lib/pages";
 import {
   getLatestPublishedAt,
-  listPublishedForFeed,
+  listIndexableForSitemap,
   listPublishedSeriesSlugs,
   listPublishedTagSlugs,
 } from "@/lib/public-posts";
@@ -22,7 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const db = getDb();
     const [posts, tagSlugs, seriesSlugs, pageSlugs, latest] = await Promise.all([
-      listPublishedForFeed(db),
+      listIndexableForSitemap(db),
       listPublishedTagSlugs(db),
       listPublishedSeriesSlugs(db),
       listPublishedPageSlugs(db),

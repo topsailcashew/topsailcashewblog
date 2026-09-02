@@ -14,7 +14,7 @@ export default async function AdminDashboard() {
   const db = getDb();
 
   let posts: SerializedPost[] = [];
-  let postCounts = { published: 0, draft: 0 };
+  let postCounts = { published: 0, draft: 0, trash: 0 };
   let commentCounts = { pending: 0, approved: 0, rejected: 0, spam: 0 };
   let pendingComments: Awaited<ReturnType<typeof listForModeration>> = [];
   let media: Awaited<ReturnType<typeof listMedia>> = [];
@@ -129,7 +129,9 @@ export default async function AdminDashboard() {
           </div>
 
           <div className="panel">
-            <h2 className="label">Recent media</h2>
+            <h2 className="label">
+              <Link href="/admin/media">Recent media</Link>
+            </h2>
             {media.length === 0 ? (
               <p className="muted">No uploads yet.</p>
             ) : (

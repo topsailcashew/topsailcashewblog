@@ -30,6 +30,7 @@ export const config = {
     "/admin/:path*",
     "/api/posts/:path*",
     "/api/pages/:path*",
+    "/api/redirects/:path*",
     "/api/media/:path*",
     "/api/comments/:path*",
     "/api/series/:path*",

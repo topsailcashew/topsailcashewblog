@@ -1,7 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
 import { posts, type PostRow, type PostStatus } from "@/db/schema";
 import { ApiError, notFound } from "./http";
+import { recordSlugChange } from "./redirects";
 import { slugify, withUniqueSlug } from "./slug";
 import { snapshotPost, type RevisionReason } from "./revisions";
 import { getTagsForPosts, syncPostTags, type TagSummary } from "./tags";
@@ -20,21 +21,43 @@ export type SerializedPost = {
   created_at: string;
   updated_at: string;
   series_id: string | null;
+  meta_title: string | null;
+  meta_description: string | null;
+  canonical_url: string | null;
+  noindex: boolean;
+  og_image_url: string | null;
+  deleted_at: string | null;
   tags: TagSummary[];
 };
 
 /** Drafts sort by when they were started, published posts by when they went live. */
 const feedOrder = sql`coalesce(${posts.publishedAt}, ${posts.createdAt}) desc, ${posts.id} desc`;
 
+/**
+ * The admin list.
+ *
+ * Trashed posts are excluded unless they are what you asked for. Keeping that
+ * here rather than at the call sites means a new admin screen cannot forget
+ * it and quietly list deleted work alongside live work.
+ */
 export async function listPosts(
   db: BlogDatabase,
   query: ListPostsQuery,
 ): Promise<SerializedPost[]> {
+  const inTrash = query.status === "trash";
+  // Narrowed deliberately: "trash" is a view, not a value the column can hold.
+  const statusFilter = query.status === "trash" ? undefined : query.status;
+
   const rows = await db
     .select()
     .from(posts)
-    .where(query.status ? eq(posts.status, query.status) : undefined)
-    .orderBy(feedOrder)
+    .where(
+      and(
+        inTrash ? isNotNull(posts.deletedAt) : isNull(posts.deletedAt),
+        statusFilter ? eq(posts.status, statusFilter) : undefined,
+      ),
+    )
+    .orderBy(inTrash ? sql`${posts.deletedAt} desc` : feedOrder)
     .limit(query.limit)
     .offset(query.offset);
 
@@ -77,6 +100,7 @@ export async function createPost(
           : status === "published"
             ? new Date()
             : null,
+        ...seoValues(input),
       })
       .returning();
     return created;
@@ -126,6 +150,7 @@ export async function updatePost(
     patch.coverImageUrl = emptyToNull(input.cover_image_url);
   }
   if (input.series_id !== undefined) patch.seriesId = input.series_id;
+  applySeo(patch, input);
 
   if (input.status !== undefined && input.status !== existing.status) {
     patch.status = input.status;
@@ -167,32 +192,124 @@ export async function updatePost(
         ? await applyPatch(db, id, patch)
         : existing;
 
+  // The other half of a rename: the old URL keeps working.
+  if (row.slug !== existing.slug) {
+    await recordSlugChange(db, `/${existing.slug}`, `/${row.slug}`);
+  }
+
   const tags = input.tags ? await syncPostTags(db, id, input.tags) : previousTags;
 
   return { post: serializePost(row, tags), previous };
 }
 
-/** Post counts by status, for the admin overview. */
+/** Post counts by status, for the admin overview. Trash is counted separately. */
 export async function countPostsByStatus(
   db: BlogDatabase,
-): Promise<{ published: number; draft: number }> {
+): Promise<{ published: number; draft: number; trash: number }> {
   const rows = await db
-    .select({ status: posts.status, value: sql<number>`count(*)::int` })
+    .select({
+      status: posts.status,
+      trashed: isNotNull(posts.deletedAt),
+      value: sql<number>`count(*)::int`,
+    })
     .from(posts)
-    .groupBy(posts.status);
+    .groupBy(posts.status, sql`${posts.deletedAt} is not null`);
 
-  const counts = { published: 0, draft: 0 };
-  for (const row of rows) counts[row.status] = row.value;
+  const counts = { published: 0, draft: 0, trash: 0 };
+  for (const row of rows) {
+    if (row.trashed) counts.trash += row.value;
+    else counts[row.status] += row.value;
+  }
   return counts;
 }
 
-export async function deletePost(db: BlogDatabase, id: string): Promise<void> {
-  // post_tags rows go with it via ON DELETE CASCADE.
+/**
+ * Move a post to the trash.
+ *
+ * The row survives — tags, revisions and comments with it — so a mistaken
+ * delete is one click from undone. The slug stays reserved while it sits
+ * there: letting a new post claim the URL would mean a restore silently comes
+ * back at `slug-2`, which is a worse surprise than a name being unavailable.
+ */
+export async function trashPost(db: BlogDatabase, id: string): Promise<void> {
+  const updated = await db
+    .update(posts)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(posts.id, id), isNull(posts.deletedAt)))
+    .returning({ id: posts.id });
+  if (updated.length === 0) throw notFound("Post");
+}
+
+export async function restorePost(
+  db: BlogDatabase,
+  id: string,
+): Promise<SerializedPost> {
+  const [row] = await db
+    .update(posts)
+    .set({ deletedAt: null })
+    .where(and(eq(posts.id, id), isNotNull(posts.deletedAt)))
+    .returning();
+  if (!row) throw notFound("Post");
+  const [post] = await attachTags(db, [row]);
+  return post;
+}
+
+/** Delete for real. Only reachable from the trash view. */
+export async function purgePost(db: BlogDatabase, id: string): Promise<void> {
+  // post_tags and revisions go with it via ON DELETE CASCADE.
   const deleted = await db
     .delete(posts)
     .where(eq(posts.id, id))
     .returning({ id: posts.id });
   if (deleted.length === 0) throw notFound("Post");
+}
+
+/** Empties the trash. Returns how many rows went. */
+export async function emptyTrash(db: BlogDatabase): Promise<number> {
+  const deleted = await db
+    .delete(posts)
+    .where(isNotNull(posts.deletedAt))
+    .returning({ id: posts.id });
+  return deleted.length;
+}
+
+/**
+ * The SEO overrides, on the way in.
+ *
+ * Empty strings become null so clearing a field in the editor removes the
+ * override rather than storing a blank one that would render as an empty
+ * meta tag.
+ */
+type SeoInput = {
+  meta_title?: string | null;
+  meta_description?: string | null;
+  canonical_url?: string | null;
+  noindex?: boolean;
+  og_image_url?: string | null;
+};
+
+function seoValues(input: SeoInput) {
+  return {
+    metaTitle: emptyToNull(input.meta_title),
+    metaDescription: emptyToNull(input.meta_description),
+    canonicalUrl: emptyToNull(input.canonical_url),
+    noindex: input.noindex ?? false,
+    ogImageUrl: emptyToNull(input.og_image_url),
+  };
+}
+
+function applySeo(patch: Partial<typeof posts.$inferInsert>, input: SeoInput) {
+  if (input.meta_title !== undefined) patch.metaTitle = emptyToNull(input.meta_title);
+  if (input.meta_description !== undefined) {
+    patch.metaDescription = emptyToNull(input.meta_description);
+  }
+  if (input.canonical_url !== undefined) {
+    patch.canonicalUrl = emptyToNull(input.canonical_url);
+  }
+  if (input.noindex !== undefined) patch.noindex = input.noindex;
+  if (input.og_image_url !== undefined) {
+    patch.ogImageUrl = emptyToNull(input.og_image_url);
+  }
 }
 
 async function applyPatch(
@@ -235,6 +352,12 @@ export function serializePost(row: PostRow, tags: TagSummary[]): SerializedPost 
     created_at: toIso(row.createdAt) ?? "",
     updated_at: toIso(row.updatedAt) ?? "",
     series_id: row.seriesId,
+    meta_title: row.metaTitle,
+    meta_description: row.metaDescription,
+    canonical_url: row.canonicalUrl,
+    noindex: row.noindex,
+    og_image_url: row.ogImageUrl,
+    deleted_at: toIso(row.deletedAt),
     tags,
   };
 }

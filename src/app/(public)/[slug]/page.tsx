@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { permanentRedirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getDb } from "@/db/client";
 import { Article } from "@/components/public/Article";
@@ -7,6 +7,7 @@ import { CommentThread } from "@/components/public/CommentThread";
 import { JsonLd } from "@/components/public/JsonLd";
 import { getApprovedThread } from "@/lib/comments";
 import { getPublishedPage, listPublishedPageSlugs } from "@/lib/pages";
+import { findRedirect } from "@/lib/redirects";
 import {
   getPublishedPost,
   getRelatedPosts,
@@ -75,25 +76,38 @@ export async function generateMetadata({
     };
   }
 
-  const description = post.excerpt ?? siteConfig.description;
+  /*
+    Each SEO field is an override with a derived fallback, so a post that has
+    none set produces exactly what it did before this panel existed.
+  */
+  const title = post.meta_title ?? post.title;
+  const description = post.meta_description ?? post.excerpt ?? siteConfig.description;
+
   return {
-    title: post.title,
+    title,
     description,
-    alternates: { canonical: `/${post.slug}` },
+    // An explicit canonical points at the original when a post is a
+    // republication; otherwise the post's own URL.
+    alternates: { canonical: post.canonical_url ?? `/${post.slug}` },
+    // Keeps a live post out of search results without unpublishing it.
+    robots: post.noindex ? { index: false, follow: true } : undefined,
     twitter: { card: "summary_large_image" },
     openGraph: {
       type: "article",
-      title: post.title,
+      title,
       description,
       url: absoluteUrl(`/${post.slug}`),
       publishedTime: post.published_at ?? undefined,
       /*
-        Cards are rendered into /public/og at build time — see
-        scripts/generate-og-images.ts for why they are not generated in the
-        Worker. The site-wide card is listed second so a post published since
-        the last deploy still has something to show.
+        An explicit card wins. Otherwise the build-time card, rendered into
+        /public/og — see scripts/generate-og-images.ts for why it is not
+        generated in the Worker. The site-wide card is listed last so a post
+        published since the last deploy still has something to show.
       */
       images: [
+        ...(post.og_image_url
+          ? [{ url: absoluteUrl(post.og_image_url), width: 1200, height: 630 }]
+          : []),
         { url: absoluteUrl(`/og/${post.slug}.png`), width: 1200, height: 630 },
         { url: absoluteUrl("/og/default.png"), width: 1200, height: 630 },
       ],
@@ -169,7 +183,17 @@ export default async function PostPage({ params }: { params: Params }) {
  */
 async function renderPage(db: ReturnType<typeof getDb>, slug: string) {
   const page = await getPublishedPage(db, slug);
-  if (!page) notFound();
+  if (!page) {
+    /*
+      Nothing lives here now — but something might have. A slug change records
+      the old path, so an inbound link from before a rename lands on a 301
+      rather than a 404. Checked last, so it costs a query only on a genuine
+      miss and never on a page that exists.
+    */
+    const destination = await findRedirect(db, `/${slug}`);
+    if (destination) permanentRedirect(destination);
+    notFound();
+  }
 
   return (
     <div className="page-layout shell-wrap" id="content">

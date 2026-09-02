@@ -151,7 +151,25 @@ touched; passing `null` clears a nullable field.
 
 ### `DELETE /api/posts/:id`
 
-→ `204` (tag links and revisions go with it) · `404` unknown
+Moves the post to the trash. The row survives, with its tags, comments and
+revisions; nothing public can reach it. Add `?permanent=1` to delete the row
+for good (tag links, comments and revisions then go with it via cascade).
+
+→ `204` · `404` unknown
+
+### `POST /api/posts/:id/restore`
+
+Brings a post back out of the trash.
+
+→ `200 { "post": { … } }` · `404` unknown, or not in the trash
+
+### `DELETE /api/posts/trash`
+
+Empties the trash. A fixed path, so it can never collide with
+`/api/posts/:id` — `trash` is not a uuid, and the id route validates that
+before touching the database.
+
+→ `200 { "deleted": <count> }`
 
 ### `GET /api/posts/:id/revisions`
 
@@ -187,11 +205,38 @@ Clears the cookie. Safe to call when already signed out.
 
 `multipart/form-data` with a `file` field and an optional `alt_text`.
 
-→ `201 { "media": { id, r2_key, url, alt_text, created_at } }`
+→ `201 { "media": { id, r2_key, url, alt_text, filename, content_type,
+size_bytes, created_at } }`
 
 ### `GET /api/media`
 
-The 50 most recent uploads, newest first.
+→ `200 { "media": [ … ], "total": <count> }`, newest first.
+`?q=` searches filename and alt text, `?limit=` (max 200) and `?offset=` page.
+
+### `GET /api/media/:id`
+
+→ `200 { "media": { … }, "usage": [ { kind, id, title } ] }`
+
+`usage` is every post or page referencing the URL — as a cover, as an Open
+Graph image, or inside the rendered body HTML.
+
+### `PATCH /api/media/:id`
+
+`{ "alt_text": "…" | null }`. Alt text is the only editable field.
+
+### `DELETE /api/media/:id`
+
+Removes the row and the R2 object. Refuses with `409` and the usage list while
+anything still references the image; `?force=1` overrides.
+
+→ `204` · `409 { "error": …, "usage": [ … ] }` · `404` unknown
+
+### `GET|POST /api/redirects`, `DELETE /api/redirects/:id`
+
+`POST` takes `{ "from_path": "/old", "to_path": "/new" }`; `to_path` may be an
+absolute URL. A source that already exists is replaced, not duplicated.
+
+→ `201 { "redirect": { … } }` · `422` if it would point at itself
 
 ### `GET /media/<key>`
 
@@ -224,6 +269,83 @@ insert, the write retries against the next free one.
 **Editing a title does not change the slug.** Permalinks stay put; pass `slug`
 explicitly to move a post. A manual slug still goes through the uniqueness
 check, so overriding to a taken slug yields `taken-2` rather than an error.
+
+Posts and pages share one namespace. They both render through `/[slug]`, which
+resolves a post first — so a post allowed to take a page's slug would not
+collide in the database, it would just make the page unreachable. Allocation
+checks both tables, and a handful of router-owned names (`admin`, `api`,
+`articles`, `search`, `tag`, …) are reserved outright.
+
+### Redirects
+
+Changing a slug records a permanent redirect from the old path, so inbound
+links, shares and search results keep working. Without it a rename 404s
+silently and nothing errors — which is why this is not optional.
+
+Three invariants are enforced when one is recorded, all in `recordSlugChange`:
+
+- **No self-redirect.** Renaming back to a previous slug would otherwise leave
+  `/a → /a`, a loop.
+- **Chains are collapsed.** Rename `a → b → c` and the row for `/a` is
+  retargeted to `/c`, never left pointing at `/b`. One hop, always.
+- **A destination cannot also be a source.** If something moves *into* a path
+  that was being redirected away, that row is dropped — the post lives there
+  now.
+
+Lookups normalise case, trailing slashes and query strings, so
+`/Old-Post/?utm_source=x` and `/old-post` are the same key. The check happens
+only after both a post and a page have missed, so it costs a query on a
+genuine 404 and nothing on a page that exists. Rules are editable at
+`/admin/redirects`, and a hand-written one may point off-site.
+
+### Trash
+
+`DELETE` moves a post to the trash rather than removing it. `deleted_at` is
+set, and every public query filters it out through the same `publishedOnly`
+predicate that handles drafts and scheduling — one place, so a new query
+cannot forget it. The admin list hides trashed posts unless asked for them.
+
+A trashed post keeps its slug reserved. Letting a new post claim the URL would
+mean restoring silently returns the post at `slug-2`, which is a worse
+surprise than a name being briefly unavailable.
+
+Emptying the trash is the only genuinely irreversible action in the admin.
+
+### Per-post SEO
+
+Five nullable columns, each an override with a derived fallback, so a post
+with none set renders exactly as it did before they existed:
+
+| Field | Falls back to |
+|---|---|
+| `meta_title` | the post title |
+| `meta_description` | the excerpt, then the site description |
+| `canonical_url` | the post's own URL |
+| `og_image_url` | the cover, then the generated card, then the site card |
+| `noindex` | `false` |
+
+`noindex` keeps a post live and linkable but out of search results, and drops
+it from the sitemap — listing a URL while telling crawlers to ignore it is
+reported as an error rather than quietly obeyed. `canonical_url` is applied to
+both the `<link rel="canonical">` and the JSON-LD `mainEntityOfPage`, so a
+crawler is never told two different things.
+
+### Media library
+
+`/admin/media` browses, searches, retags and deletes uploads.
+
+"Where is this used?" is answered by searching for the URL rather than by a
+join table. An image can be a cover, an Open Graph image, or an inline `<img>`
+in rendered HTML — a join table would have to be kept in step with the editor
+on every keystroke, and would go stale the moment a URL was pasted by hand. A
+`LIKE` cannot go stale, and at this scale it costs nothing. That is what makes
+deletion safe to offer: the admin says "used in 2 posts" instead of silently
+breaking them, and refuses with `409` unless forced.
+
+Deletion removes the database row before the R2 object. A row pointing at a
+missing object is a broken image; an orphaned object is only wasted bytes — so
+if the R2 call fails, the half-done state is the one we can live with. Upload
+makes the same trade in reverse.
 
 ### Publishing and scheduling
 
@@ -408,8 +530,8 @@ same bindings and same APIs as production, but not your account's.
 
 ### Worker size
 
-The dry run reports **2941 KiB gzipped** against Cloudflare's 3 MB free-plan
-limit — about **131 KiB of headroom**. The webfonts ship as static assets,
+The dry run reports **2891 KiB gzipped** against Cloudflare's 3 MB free-plan
+limit — about **181 KiB of headroom**. The webfonts ship as static assets,
 which are uploaded separately and do not count toward the Worker script.
 
 Phase 4 nearly broke this. Generating Open Graph images inside the Worker
@@ -515,18 +637,25 @@ deletes what it creates. It needs `jq`.
 
 ## Schema
 
-Four tables — see [`drizzle/0000_init.sql`](drizzle/0000_init.sql).
+Nine tables — see [`drizzle/`](drizzle/) for the migrations.
 
 ```
-posts       id, title, slug, content_json, content_html, excerpt,
-            cover_image_url, status, published_at, created_at, updated_at,
-            series_id, search_vector
-tags        id, name, slug
-post_tags   post_id, tag_id                        (composite pk)
-media       id, r2_key, url, alt_text, created_at
-series      id, title, slug, description, created_at
-comments    id, post_id, parent_id, author_name, author_email, body,
-            status, created_at, is_author, author_ip_hash
+posts           id, title, slug, content_json, content_html, excerpt,
+                cover_image_url, status, published_at, created_at, updated_at,
+                series_id, search_vector,
+                meta_title, meta_description, canonical_url, noindex,
+                og_image_url, deleted_at
+tags            id, name, slug
+post_tags       post_id, tag_id                    (composite pk)
+media           id, r2_key, url, alt_text, filename, content_type,
+                size_bytes, created_at
+series          id, title, slug, description, created_at
+comments        id, post_id, parent_id, author_name, author_email, body,
+                status, created_at, is_author, author_ip_hash
+post_revisions  id, post_id, title, excerpt, content_json, reason, created_at
+pages           id, title, slug, content_json, content_html, status,
+                created_at, updated_at
+redirects       id, from_path, to_path, automatic, created_at
 ```
 
 ### Choices made on top of the spec

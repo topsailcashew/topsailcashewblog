@@ -5,7 +5,14 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { sql } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
 import { posts, schema } from "@/db/schema";
-import { createPost, deletePost, getPostById, listPosts, updatePost } from "@/lib/posts";
+import {
+  createPost,
+  getPostById,
+  listPosts,
+  purgePost,
+  trashPost,
+  updatePost,
+} from "@/lib/posts";
 import { isUniqueViolation } from "@/lib/slug";
 import { connectionString, hasDatabase, migrateOnce } from "./helpers";
 import { startNeonShim, type NeonShim } from "./neon-http-shim";
@@ -77,7 +84,15 @@ describe(
       assert.equal(listed.length, 1);
       assert.deepEqual(listed[0].tags.map((tag) => tag.name), ["Neon"]);
 
-      await deletePost(db, created.id);
+      // Trash keeps the row and drops it from the list; purge removes it.
+      await trashPost(db, created.id);
+      assert.equal(await getPostById(db, created.id) !== null, true);
+      assert.equal(
+        (await listPosts(db, { status: "published", limit: 10, offset: 0 })).length,
+        0,
+      );
+
+      await purgePost(db, created.id);
       assert.equal(await getPostById(db, created.id), null);
     });
 
