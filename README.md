@@ -1443,3 +1443,4 @@ advisory is about esbuild's **dev server** accepting cross-origin requests.
 `drizzle-kit` is a devDependency that never runs that server, and none of this
 reaches the Worker bundle. Fixing it means waiting for `drizzle-kit` to bump —
 `npm audit fix --force` downgrades it and breaks migrations.
+# topsailcashewblog
