@@ -46,11 +46,6 @@ export default async function AboutPage() {
     <div className="shell-wrap about">
       <JsonLd json={pageJsonLd(page)} />
 
-      <p className="about-intro">
-        <span aria-hidden="true">👋</span> Welcome to {siteConfig.name} — a
-        place for essays, notes, and long-form writing.
-      </p>
-
       <header className={page.cover_image_url ? "about-hero" : "about-hero about-hero--bare"}>
         {/*
           Two lines, the second stroked rather than filled. The words are one
@@ -59,7 +54,7 @@ export default async function AboutPage() {
         */}
         <h1 className="about-statement">
           <span className="about-line">Hi, I&rsquo;m</span>
-          <span className="about-line about-line--outline">Nate!</span>
+          <span className="about-line about-line--outline">Nate.</span>
         </h1>
 
         {page.cover_image_url && (
