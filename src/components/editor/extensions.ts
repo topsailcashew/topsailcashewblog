@@ -4,6 +4,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import type { Extensions } from "@tiptap/react";
 import { promptForLink } from "./link-prompt";
+import { ProseHighlight } from "./prose-highlight";
 
 /**
  * Fired on the editor's own DOM node when ⌘⌥I is pressed.
@@ -65,6 +66,13 @@ export function buildExtensions(placeholder = "Tell the story…"): Extensions {
       HTMLAttributes: { loading: "lazy" },
     }),
     Placeholder.configure({ placeholder }),
+    /*
+      Always present, dormant until switched on. It cannot be added
+      conditionally: this list is built once inside a `useMemo`, and rebuilding
+      it recreates the ProseMirror schema — which would reset the open
+      document every time the writer ticked the box.
+    */
+    ProseHighlight,
   ];
 }
 

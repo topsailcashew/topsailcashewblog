@@ -6,6 +6,7 @@ import {
 import { handle as fediverseHandle } from "@/lib/activitypub/actor";
 import { countFollowers } from "@/lib/activitypub/delivery";
 import { loadFediverseSettings } from "@/lib/activitypub/keys";
+import { DEFAULT_AI, loadAiSettings, redactAi, type RedactedAi } from "@/lib/ai/config";
 import {
   DEFAULT_NEWSLETTER,
   loadNewsletterSettings,
@@ -21,17 +22,20 @@ export default async function AdminSettingsPage() {
   let smtp: RedactedSmtp | null = null;
   let newsletter: NewsletterSettings = DEFAULT_NEWSLETTER;
   let fediverse: FediverseView | null = null;
+  let ai: RedactedAi = redactAi(DEFAULT_AI);
   let error: string | null = null;
 
   try {
     const db = getDb();
-    const [loadedSmtp, loadedNewsletter, loadedFediverse, followers] =
+    const [loadedSmtp, loadedNewsletter, loadedFediverse, followers, loadedAi] =
       await Promise.all([
         loadSmtpSettings(db),
         loadNewsletterSettings(db),
         loadFediverseSettings(db),
         countFollowers(db),
+        loadAiSettings(db),
       ]);
+    ai = redactAi(loadedAi);
     smtp = redactSmtp(loadedSmtp);
     newsletter = loadedNewsletter;
     fediverse = {
@@ -63,6 +67,7 @@ export default async function AdminSettingsPage() {
           initialSmtp={smtp}
           initialNewsletter={newsletter}
           initialFediverse={fediverse}
+          initialAi={ai}
         />
       )}
     </main>

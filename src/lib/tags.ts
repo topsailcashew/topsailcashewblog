@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
-import type { TagRow } from "@/db/schema";
+import { postTags, tags, type TagRow } from "@/db/schema";
 import { slugify } from "./slug";
 
 export type TagSummary = { id: string; name: string; slug: string };
@@ -101,6 +101,31 @@ export async function syncPostTags(
 }
 
 /** Loads tags for a batch of posts, keyed by post id. */
+/**
+ * Every tag on the blog, drafts included, with how often it is used.
+ *
+ * `listProminentTags` in public-posts.ts cannot be reused here: it inner-joins
+ * *published* posts, so a tag that so far only appears on drafts is invisible
+ * to it — and drafts are exactly what the suggestions panel operates on.
+ * Ordered by use, so the prompt lists the blog's real vocabulary first.
+ */
+export async function listTagVocabulary(
+  db: BlogDatabase,
+  limit = 60,
+): Promise<{ name: string; slug: string; count: number }[]> {
+  return db
+    .select({
+      name: tags.name,
+      slug: tags.slug,
+      count: sql<number>`count(${postTags.postId})::int`,
+    })
+    .from(tags)
+    .leftJoin(postTags, eq(postTags.tagId, tags.id))
+    .groupBy(tags.id, tags.name, tags.slug)
+    .orderBy(sql`count(${postTags.postId}) desc`, tags.name)
+    .limit(limit);
+}
+
 export async function getTagsForPosts(
   db: BlogDatabase,
   postIds: readonly string[],

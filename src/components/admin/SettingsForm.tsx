@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { NewsletterSettings, RedactedSmtp } from "@/lib/email/config";
+import type { RedactedAi } from "@/lib/ai/config";
 
 export type FediverseView = {
   enabled: boolean;
@@ -25,16 +26,24 @@ export function SettingsForm({
   initialSmtp,
   initialNewsletter,
   initialFediverse,
+  initialAi,
 }: {
   initialSmtp: RedactedSmtp;
   initialNewsletter: NewsletterSettings;
   initialFediverse: FediverseView;
+  initialAi: RedactedAi;
 }) {
   const router = useRouter();
 
   const [smtp, setSmtp] = useState(initialSmtp);
   const [newsletter, setNewsletter] = useState(initialNewsletter);
   const [fediverse, setFediverse] = useState(initialFediverse);
+  const [ai, setAi] = useState(initialAi);
+  /* Held apart from `ai` for the same reason the SMTP password is. */
+  const [apiKey, setApiKey] = useState("");
+  const [aiTest, setAiTest] = useState<
+    { kind: "idle" } | { kind: "busy" } | { kind: "ok"; ms: number } | { kind: "error"; message: string }
+  >({ kind: "idle" });
   /**
    * Held apart from `smtp` on purpose. The stored password never reaches this
    * component, so an empty box has to mean "unchanged" — if it lived on the
@@ -43,6 +52,12 @@ export function SettingsForm({
   const [password, setPassword] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
+
+  /*
+    Derived from the live form state, not from what was loaded — the warning
+    should clear the moment a host is typed, not after the next save.
+  */
+  const smtpReady = smtp.host.trim() !== "" && smtp.fromEmail.trim() !== "" && smtp.port > 0;
 
   const [testTo, setTestTo] = useState("");
   const [testState, setTestState] = useState<
@@ -67,6 +82,12 @@ export function SettingsForm({
             enabled: fediverse.enabled,
             username: fediverse.username,
             summary: fediverse.summary,
+          },
+          ai: {
+            enabled: ai.enabled,
+            text_model: ai.textModel,
+            image_model: ai.imageModel,
+            ...(apiKey === "" ? {} : { api_key: apiKey }),
           },
           smtp: {
             host: smtp.host,
@@ -99,18 +120,39 @@ export function SettingsForm({
         smtp: RedactedSmtp;
         newsletter: NewsletterSettings;
         fediverse: FediverseView;
+        ai: RedactedAi;
       };
       setSmtp(saved.smtp);
       setNewsletter(saved.newsletter);
       setFediverse(saved.fediverse);
+      setAi(saved.ai);
       setPassword("");
+      setApiKey("");
       setState("saved");
       router.refresh();
     } catch (cause) {
       setState("idle");
       setError(cause instanceof Error ? cause.message : "Could not save");
     }
-  }, [fediverse, newsletter, password, router, smtp]);
+  }, [ai, apiKey, fediverse, newsletter, password, router, smtp]);
+
+  const testAi = useCallback(async () => {
+    setAiTest({ kind: "busy" });
+    try {
+      const response = await fetch("/api/settings/ai/test", { method: "POST" });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        latency_ms?: number;
+      };
+      if (!response.ok) throw new Error(body.error ?? `Test failed (${response.status})`);
+      setAiTest({ kind: "ok", ms: body.latency_ms ?? 0 });
+    } catch (cause) {
+      setAiTest({
+        kind: "error",
+        message: cause instanceof Error ? cause.message : "Test failed",
+      });
+    }
+  }, []);
 
   const sendTest = useCallback(async () => {
     setTestState({ kind: "busy" });
@@ -156,6 +198,16 @@ export function SettingsForm({
           Off, the signup form does not render on the site and the editor
           refuses to send. Nothing already collected is touched.
         </p>
+
+        {newsletter.enabled && !smtpReady && (
+          <p className="hint hint--warn" role="alert">
+            Signups are open but no mail server is configured below. Readers
+            will subscribe, see &ldquo;check your inbox&rdquo;, and never get a
+            confirmation — with double opt-in on, every one of them stays
+            <em> pending</em> and can never be sent to. Add SMTP settings, or
+            turn signups off until you have.
+          </p>
+        )}
 
         <label>
           Pitch
@@ -366,6 +418,106 @@ export function SettingsForm({
             onChange={(event) => setFediverse({ ...fediverse, summary: event.target.value })}
           />
         </label>
+      </section>
+
+      <section className="panel">
+        <h2 className="label">Writing assistant (Gemini)</h2>
+        <p className="hint">
+          Adds a structural read, cover-image generation and metadata
+          suggestions to the editor. The readability numbers in the Writing
+          panel need none of this — they are measured locally and work without
+          a key.
+        </p>
+
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={ai.enabled}
+            onChange={(event) => setAi({ ...ai, enabled: event.target.checked })}
+          />
+          Enable AI assistance
+        </label>
+        <p className="hint">
+          Nothing runs on its own. Every button in the editor is one API call —
+          a fully assisted post costs a few pence, most of it the cover image.
+        </p>
+
+        <label>
+          API key
+          <input
+            type="password"
+            value={apiKey}
+            autoComplete="new-password"
+            placeholder={
+              ai.key_from_env
+                ? "Supplied by GEMINI_API_KEY"
+                : ai.has_key
+                  ? "Stored — leave blank to keep"
+                  : "Not set"
+            }
+            disabled={ai.key_from_env}
+            onChange={(event) => setApiKey(event.target.value)}
+          />
+        </label>
+        <p className="hint">
+          {ai.key_from_env ? (
+            <>
+              The environment supplies this, which takes precedence over
+              anything stored here — and is the safer place for it.
+            </>
+          ) : (
+            <>
+              Stored encrypted, and never sent back to this page. A Worker
+              secret is safer still:{" "}
+              <code>npx wrangler secret put GEMINI_API_KEY</code> overrides
+              whatever is saved here.
+            </>
+          )}
+        </p>
+
+        <div className="field-row">
+          <label className="field-grow">
+            Text model
+            <input
+              value={ai.textModel}
+              placeholder="gemini-2.5-flash"
+              onChange={(event) => setAi({ ...ai, textModel: event.target.value })}
+            />
+          </label>
+          <label className="field-grow">
+            Image model
+            <input
+              value={ai.imageModel}
+              placeholder="gemini-2.5-flash-image"
+              onChange={(event) => setAi({ ...ai, imageModel: event.target.value })}
+            />
+          </label>
+        </div>
+        <p className="hint">
+          Model ids move. If a call comes back saying no such model, change it
+          here rather than waiting for a deploy.
+        </p>
+
+        <div className="field-row">
+          <button
+            type="button"
+            className="btn"
+            disabled={aiTest.kind === "busy" || !ai.has_key}
+            onClick={() => void testAi()}
+          >
+            {aiTest.kind === "busy" ? "Testing…" : "Test connection"}
+          </button>
+          {aiTest.kind === "ok" && (
+            <span className="muted">
+              {ai.textModel} answered in {aiTest.ms} ms.
+            </span>
+          )}
+        </div>
+        {aiTest.kind === "error" && (
+          <p className="error" role="alert">
+            {aiTest.message}
+          </p>
+        )}
       </section>
 
       <div className="row settings-actions">

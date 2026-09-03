@@ -23,9 +23,11 @@ const PostEditor = dynamic(
 export function PostEditorLoader({
   initialPost,
   series,
+  aiReady,
 }: {
   initialPost: SerializedPost | null;
   series: SerializedSeries[];
+  aiReady: boolean;
 }) {
-  return <PostEditor initialPost={initialPost} series={series} />;
+  return <PostEditor initialPost={initialPost} series={series} aiReady={aiReady} />;
 }

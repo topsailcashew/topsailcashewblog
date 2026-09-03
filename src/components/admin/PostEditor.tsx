@@ -19,6 +19,9 @@ import { CoverImagePicker } from "./CoverImagePicker";
 import { EditorSection } from "./EditorSection";
 import { ImageDetailsDialog } from "./ImageDetailsDialog";
 import { NewsletterPanel } from "./NewsletterPanel";
+import { SuggestionsPanel, type SuggestionPatch } from "./SuggestionsPanel";
+import { WritingPanel } from "./WritingPanel";
+import { setProseHighlight } from "@/components/editor/prose-highlight";
 import { PreviewButton } from "./PreviewButton";
 import { PublishPanel } from "./PublishPanel";
 import { RevisionPanel } from "./RevisionPanel";
@@ -64,9 +67,12 @@ function draftFromPost(post: SerializedPost | null): Draft {
 export function PostEditor({
   initialPost,
   series = [],
+  aiReady = false,
 }: {
   initialPost: SerializedPost | null;
   series?: SerializedSeries[];
+  /** Resolved on the server, so no panel has to fetch to learn it. */
+  aiReady?: boolean;
 }) {
   const router = useRouter();
 
@@ -75,6 +81,7 @@ export function PostEditor({
   const [publishedAt, setPublishedAt] = useState(initialPost?.published_at ?? null);
   const [draft, setDraft] = useState<Draft>(() => draftFromPost(initialPost));
   const [actionError, setActionError] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -178,6 +185,36 @@ export function PostEditor({
   /** A brand-new post is only worth creating once it has something in it. */
   const hasSubstance =
     draft.title.trim() !== "" || (editor ? editor.getText().trim() !== "" : false);
+
+  /**
+   * Applies one accepted suggestion.
+   *
+   * Everything lands in the autosaved draft rather than being written
+   * directly, so an accepted suggestion is as undoable as anything else the
+   * writer typed.
+   */
+  const applySuggestion = useCallback((patch: SuggestionPatch) => {
+    setDraft((current) => ({
+      ...current,
+      ...(patch.title !== undefined ? { title: patch.title } : {}),
+      ...(patch.excerpt !== undefined ? { excerpt: patch.excerpt } : {}),
+      ...(patch.seriesId !== undefined ? { seriesId: patch.seriesId } : {}),
+      ...(patch.addTags
+        ? {
+            tags: [
+              ...current.tags,
+              ...patch.addTags.filter(
+                (tag) =>
+                  !current.tags.some((existing) => existing.toLowerCase() === tag.toLowerCase()),
+              ),
+            ],
+          }
+        : {}),
+      ...(patch.metaDescription !== undefined
+        ? { seo: { ...current.seo, metaDescription: patch.metaDescription } }
+        : {}),
+    }));
+  }, []);
 
   const persist = useCallback(
     async (value: Draft): Promise<Draft> => {
@@ -456,6 +493,26 @@ export function PostEditor({
             />
           </EditorSection>
 
+          {/* Second, because it is the only panel used *while* writing —
+              its collapsed summary is the readability meter. */}
+          <WritingPanel
+            postId={postId}
+            contentJson={draft.contentJson}
+            aiReady={aiReady}
+            highlight={highlight}
+            onHighlightChange={(on) => {
+              setHighlight(on);
+              /*
+                A plugin-state flag, not a conditional extension: the
+                extension list is built once inside a useMemo, and rebuilding
+                it would recreate the schema and reset the open document.
+              */
+              const view = editorRef.current?.view;
+              if (view) setProseHighlight(view, on);
+            }}
+            onBeforeRun={flush}
+          />
+
           {/* Owns its own collapsible section, so it can load on expand. */}
           <NewsletterPanel
             postId={postId}
@@ -464,6 +521,26 @@ export function PostEditor({
               // A send publishes the post server-side; the bar has to catch up.
               setStatus("published");
               router.refresh();
+            }}
+          />
+
+          {/* Directly above Details, so accepted tags and excerpt land in the
+              section immediately below. Cause and effect, adjacent. */}
+          <SuggestionsPanel
+            postId={postId}
+            aiReady={aiReady}
+            currentTitle={draft.title}
+            onBeforeRun={flush}
+            onApply={applySuggestion}
+            onInsertQuote={(quote) => {
+              editorRef.current
+                ?.chain()
+                .focus()
+                .insertContent({
+                  type: "blockquote",
+                  content: [{ type: "paragraph", content: [{ type: "text", text: quote }] }],
+                })
+                .run();
             }}
           />
 
@@ -521,6 +598,10 @@ export function PostEditor({
           <CoverImagePicker
             url={draft.coverImageUrl}
             onChange={(url) => update("coverImageUrl", url)}
+            postId={postId}
+            postSlug={draft.slug}
+            aiReady={aiReady}
+            onBeforeGenerate={flush}
           />
         </div>
           </EditorSection>

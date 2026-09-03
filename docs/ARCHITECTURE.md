@@ -61,6 +61,8 @@ uploads and the page cache work before any of them exist.
 | `NEON_FETCH_ENDPOINT` | no | app | Redirects the Neon HTTP driver at a local SQL-over-HTTP proxy (e.g. Neon Local) so `next dev` can run against a plain Postgres. Leave unset in production. |
 | `SMTP_PASSWORD` | no | newsletter | Overrides whatever the settings screen stored. A Worker secret is not in backups and not in a `select *`, so this is the better place for it. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USERNAME`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | no | newsletter | Each overrides the stored value field by field, so a deployment can supply only what it wants to pin. |
+| `GEMINI_API_KEY` | no | writing assistance | Overrides the key stored by the settings screen. Without it the editor's readability numbers still work — they are local — but the structural read, suggestions and cover generation are off. |
+| `GEMINI_TEXT_MODEL`, `GEMINI_IMAGE_MODEL` | no | writing assistance | Pin a model id without a deploy. Defaults `gemini-2.5-flash` and `gemini-2.5-flash-image`. |
 
 **R2 needs no credentials.** The bucket is reached through the `MEDIA_BUCKET`
 binding declared in [`wrangler.jsonc`](wrangler.jsonc), so there is no access
@@ -1813,6 +1815,115 @@ subscribers, sends no confirmation, and — with double opt-in on by default —
 strands every one of them in `pending` forever, with a `console.warn` as the
 only evidence. The settings screen now warns about that combination rather than
 leaving it to be discovered.
+
+## Writing assistance
+
+Three features on Gemini, reached with plain `fetch` — no SDK. `@google/genai`
+is a couple of hundred kilobytes against a 3 MiB Worker budget for a request
+that is one JSON object, which is the same reasoning behind the hand-written
+SMTP client. `src/lib/ai/gemini.ts` copies `smtp.ts`'s shape: an injectable
+transport, its own error type, and every failure mapped to a sentence the
+author can act on.
+
+The API key is stored exactly like the SMTP password — AES-GCM under
+`SESSION_SECRET`, never returned to the browser, `GEMINI_API_KEY` in the
+environment overriding it. Model ids are settings, not constants: "Nano Banana"
+is a marketing name over an id that has already moved once, and a 404 from
+Gemini names the model and points at Settings.
+
+### The Hemingway split
+
+The request was "a Hemingway editor" and "use Gemini". Those are two features
+wearing one name, and they are built as two.
+
+Everything Hemingway shows on screen is arithmetic — sentence grading, adverbs,
+passive voice, wordy phrases, reading grade — so `src/lib/prose-metrics.ts`
+computes it locally: instant, free, exact, and identical on every run. A model
+asked to count adverbs in four thousand words miscounts, and miscounts
+differently each time; the one property a readability meter must have is that
+the number goes down when you fix something.
+
+The module is pure and dependency-free because both sides import it: the panel
+in the browser and the analysis route on the server. Three choices worth
+knowing:
+
+- Sentence splitting is hand-rolled rather than `Intl.Segmenter`, whose ICU
+  rules differ between Node (tests) and workerd (production). A metric whose
+  value depends on the V8 build is not a metric.
+- The grade is ARI, which counts characters and needs no syllable heuristic.
+- A sentence is graded on length *and* density, so a long sentence of short
+  words is not flagged and a short Latinate one is.
+- Passive detection needs both an irregular-participle list ("was written")
+  and an adjectival stoplist ("was tired"). Neither works alone.
+
+The collapsed panel summary — `grade 9 · 3 hard · 2 adverbs` — is the feature.
+It sits in the sidebar the whole time you are writing, costs nothing, and needs
+no API key. Highlighting in the text is the same module's offsets rendered as
+ProseMirror decorations, off by default.
+
+Two constraints in the highlighter that are not obvious. The toggle is
+**plugin state flipped by a transaction**, never a conditionally-included
+extension: `PostEditor` builds its extension list inside a `useMemo` because
+rebuilding it recreates the schema, so a conditional extension would reset the
+open document on every toggle. And the `DecorationSet` is **recomputed** rather
+than mapped through the transaction — mapping is cheaper and is the source of
+every drifting-highlight bug, because a decoration's meaning here depends on
+the text it covers rather than on its position.
+
+The model half gets the local numbers in its prompt as settled facts, with an
+instruction not to restate them. That is rule 3 of `ANALYSIS_RULES`, and it is
+what makes the two halves one feature rather than two stapled together.
+
+### What the server checks before showing you anything
+
+`src/lib/ai/verify.ts`, all pure and all tested. A `responseSchema` is a polite
+request: it lowers the error rate and guarantees nothing.
+
+- **Pull-quotes must be verbatim.** Each block is normalised (curly quotes, em
+  dashes, whitespace) alongside a character-offset map, searched
+  case-insensitively, and on a hit the map converts back so the *author's* own
+  characters are returned rather than the model's flattened rendition.
+  Searching per block is what rejects a quote stitched across two paragraphs —
+  structurally impossible, and something a whole-document search would accept.
+- **Regurgitation.** Any finding repeating more than twelve consecutive words
+  of the draft is dropped. Handing the author their own paragraph back labelled
+  as insight is worse than no finding.
+- **Tags cannot explode.** A proposed new tag is run through `slugify` — the
+  blog's own definition of tag identity — and folded into an existing tag when
+  the slug collides, rather than creating a duplicate.
+- **Series is existing-or-nothing**, and only suggested for a post that has
+  none. A deliberate choice is not overwritten by a guess.
+- **An empty analysis is an error, not a result.** A blank findings list reads
+  as "your draft is flawless".
+
+### Covers as a set
+
+Two stages, and the second is string concatenation rather than a model call.
+Stage one reduces the post to a subject brief whose schema has no field for
+colour, medium, style or composition — it cannot express them. Stage two wraps
+that brief in a template that is byte-identical every time. The variable is the
+subject; the constant is the style. That is what makes covers a series rather
+than seven individually-fine pictures.
+
+It is also the prompt-injection boundary: `/api/import` accepts arbitrary
+`.docx`, so post content is not trusted, and it reaches the image model only
+through three short schema-constrained fields filtered for colour and medium
+words.
+
+The palette is locked to `#000000` / `#ffffff` / `#ff5a1f`. The composition
+rotates between four fixed layouts keyed off a hash of the slug, so the set
+stays varied while the same post always regenerates into the same layout.
+
+The bytes come back to the **browser**, not through R2 in the Worker. A
+rejected generation then leaves no orphaned object and no `media` row; the
+Worker skips a two-megabyte `atob` on a 10 ms CPU budget; and the accepted
+cover goes through the existing `uploadImage`, so it gets a BlurHash like every
+other upload.
+
+### Cost
+
+Nothing runs on its own. Every model call is one deliberate button press —
+there is no autosave-triggered analysis and no background generation.
 
 ## Decisions
 

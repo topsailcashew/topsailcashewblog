@@ -335,3 +335,37 @@ export const fediverseSettingsSchema = z.object({
     .regex(/^[a-zA-Z0-9_-]+$/, "Letters, digits, underscore and hyphen only"),
   summary: z.string().trim().max(500),
 });
+
+/* --- writing assistance --------------------------------------------------- */
+
+export const aiSettingsSchema = z.object({
+  enabled: z.boolean(),
+  /**
+   * Absent means "leave the stored one alone"; null means "clear it".
+   * An empty string is treated as absent, because that is what an untouched
+   * password field posts.
+   */
+  api_key: z.string().max(300).nullable().optional(),
+  text_model: z.string().trim().min(1).max(80),
+  image_model: z.string().trim().min(1).max(80),
+});
+
+/**
+ * The cover route accepts an optional brief.
+ *
+ * Passing one back skips stage one and re-runs only the image, which is
+ * cheaper and faster — and it is what turns "try again" from a slot machine
+ * into a steering wheel.
+ */
+export const generateCoverSchema = z
+  .object({
+    brief: z
+      .object({
+        subject: z.string().trim().min(8).max(300),
+        human: z.string().trim().max(120).optional(),
+        avoid: z.array(z.string().trim().max(60)).max(4).optional(),
+      })
+      .optional(),
+  })
+  .optional()
+  .default({});

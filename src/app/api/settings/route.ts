@@ -11,6 +11,7 @@ import {
 } from "@/lib/email/config";
 import { ApiError, handle, json, readJsonBody } from "@/lib/http";
 import {
+  aiSettingsSchema,
   fediverseSettingsSchema,
   newsletterSettingsSchema,
   smtpSettingsSchema,
@@ -21,6 +22,7 @@ import {
   saveFediverseSettings,
 } from "@/lib/activitypub/keys";
 import { countFollowers } from "@/lib/activitypub/delivery";
+import { loadAiSettings, redactAi, saveAiSettings } from "@/lib/ai/config";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +31,10 @@ const bodySchema = z
     smtp: smtpSettingsSchema.optional(),
     newsletter: newsletterSettingsSchema.optional(),
     fediverse: fediverseSettingsSchema.optional(),
+    ai: aiSettingsSchema.optional(),
   })
   .refine(
-    (body) => body.smtp || body.newsletter || body.fediverse,
+    (body) => body.smtp || body.newsletter || body.fediverse || body.ai,
     "Provide a settings group",
   );
 
@@ -43,11 +46,12 @@ const bodySchema = z
  * that is all it needs to render.
  */
 async function readAll(db: ReturnType<typeof getDb>) {
-  const [smtp, newsletter, fediverse, followers] = await Promise.all([
+  const [smtp, newsletter, fediverse, followers, ai] = await Promise.all([
     loadSmtpSettings(db),
     loadNewsletterSettings(db),
     loadFediverseSettings(db),
     countFollowers(db).catch(() => 0),
+    loadAiSettings(db),
   ]);
 
   return {
@@ -61,6 +65,7 @@ async function readAll(db: ReturnType<typeof getDb>) {
       has_key: Boolean(fediverse.publicKeyPem),
       followers,
     },
+    ai: redactAi(ai),
   };
 }
 
@@ -85,6 +90,21 @@ export const PUT = handle(async (request: NextRequest) => {
 
   if (body.fediverse) {
     await saveFediverseSettings(db, body.fediverse);
+  }
+
+  if (body.ai) {
+    await saveAiSettings(
+      db,
+      {
+        enabled: body.ai.enabled,
+        textModel: body.ai.text_model,
+        imageModel: body.ai.image_model,
+        // Absent or empty means "keep what is stored" — the form never
+        // receives the key, so an untouched field must not clear it.
+        apiKey: body.ai.api_key === undefined ? undefined : body.ai.api_key,
+      },
+      secret,
+    );
   }
 
   if (body.smtp) {

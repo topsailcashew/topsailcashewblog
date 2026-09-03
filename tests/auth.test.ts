@@ -156,6 +156,15 @@ describe("the proxy matcher and the protected list agree", () => {
       ["/api/settings/test", "POST"],
       ["/api/newsletter", "GET"],
       ["/api/posts/abc/newsletter", "POST"],
+      /*
+        The AI routes need no change to PROTECTED_API_PREFIXES or the proxy
+        matcher, because they nest under prefixes already gated for every
+        method. These assertions are what proves that, rather than assuming it.
+      */
+      ["/api/posts/abc/analysis", "POST"],
+      ["/api/posts/abc/suggest", "POST"],
+      ["/api/posts/abc/cover", "POST"],
+      ["/api/settings/ai/test", "POST"],
       ["/admin/subscribers", "GET"],
       ["/admin/settings", "GET"],
     ];

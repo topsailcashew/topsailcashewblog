@@ -1609,6 +1609,22 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   margin-top: var(--s1);
 }
 /*
+  A checkbox is not a text field. The rule above makes every input a full-width
+  block, which pushes a checkbox onto its own line above its own label — the
+  same bug the settings screen had. Both toggles in the sidebar are inline.
+*/
+.editor-sidebar .check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.editor-sidebar .check-row input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+  margin-top: 0;
+  flex: none;
+}
+/*
   An author `display: block` outranks the UA stylesheet's rule for [hidden],
   so the cover picker's hidden file input was rendering as a raw "Choose File"
   control underneath its own button.
@@ -2000,3 +2016,162 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .admin-pager .row { gap: var(--s3); }
 
 .media-more { display: flex; justify-content: center; margin-top: var(--s5); }
+
+/* --- the writing panel --------------------------------------------------- */
+
+.metric-list {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s2) var(--s3);
+  margin: 0 0 var(--s3);
+  font-size: var(--text-sm);
+}
+.metric-list dt { color: var(--fg-muted); }
+.metric-list dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.metric-value.is-over { color: var(--accent-ink); font-weight: 600; }
+.metric-note {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--fg-muted);
+}
+
+.worst-list { margin-top: var(--s4); }
+.worst-list ol { list-style: none; margin: var(--s2) 0 0; padding: 0; }
+.worst-list li {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: var(--s2);
+  align-items: baseline;
+  margin-bottom: var(--s2);
+  font-size: var(--text-xs);
+}
+.sentence-level {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+}
+.sentence-level--hard { color: var(--accent-ink); }
+.sentence-level--very_hard { color: var(--danger); }
+.worst-text { color: var(--fg-muted); }
+
+.panel-rule { margin: var(--s4) 0; border: 0; border-top: 1px solid var(--border); }
+
+/* --- the structural read -------------------------------------------------- */
+
+.analysis { margin-top: var(--s4); font-size: var(--text-sm); }
+.analysis-one-thing {
+  margin: 0 0 var(--s4);
+  padding: var(--s3);
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.analysis-one-thing .label { display: block; margin-bottom: var(--s1); }
+.analysis-group { margin-bottom: var(--s4); }
+.analysis-list, .analysis-shape { list-style: none; margin: var(--s2) 0 0; padding: 0; }
+.analysis-list li, .analysis-shape li {
+  margin-bottom: var(--s3);
+  padding-left: var(--s3);
+  border-left: 2px solid var(--border);
+}
+/* Severity is carried by the rule at the edge, not by the text colour — the
+   text still has to be readable. */
+.severity--blocking { border-left-color: var(--danger); }
+.severity--worth_fixing { border-left-color: var(--accent); }
+.verdict--slow, .verdict--redundant, .verdict--misplaced { border-left-color: var(--accent); }
+.analysis-problem { display: block; }
+.analysis-where { display: block; font-size: var(--text-xs); color: var(--fg-muted); }
+.analysis-fix { display: block; margin-top: var(--s1); color: var(--accent-ink); }
+.analysis-verdict { margin: 0 0 var(--s3); }
+.analysis-verdict .label { display: inline; margin-right: var(--s2); }
+.analysis-verdict-value { font-weight: 600; }
+
+/* --- suggestions ---------------------------------------------------------- */
+
+.suggestions-panel .suggest-group { margin-top: var(--s4); }
+.suggest-current { margin: 0 0 var(--s2); }
+.suggest-list { list-style: none; margin: 0; padding: 0; }
+.suggest-list li { margin-bottom: var(--s1); }
+/*
+  Every suggestion is a button that does nothing until pressed. Nothing here
+  is pre-selected and nothing applies itself — a generated title that quietly
+  replaced a hand-written one would poison trust in the whole panel.
+*/
+.suggest-apply {
+  display: block;
+  width: 100%;
+  padding: var(--s2);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.suggest-apply:hover { border-color: var(--fg); }
+.suggest-chips { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s2); }
+.tag-pill--new { border-style: dashed; }
+.suggest-quotes { list-style: none; margin: var(--s2) 0 0; padding: 0; }
+.suggest-quotes li { margin-bottom: var(--s3); }
+.suggest-quotes blockquote {
+  margin: 0 0 var(--s1);
+  padding-left: var(--s3);
+  border-left: 3px solid var(--accent);
+  font-family: var(--serif);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.suggest-keywords { margin: var(--s1) 0 0; font-size: var(--text-xs); color: var(--fg-muted); }
+
+/* --- cover generation ----------------------------------------------------- */
+
+.cover-generator { display: grid; gap: var(--s3); }
+.cover-generator .cover-preview { width: 100%; height: auto; border: 1px solid var(--border); }
+.cover-generator textarea { width: 100%; }
+
+/* --- Hemingway highlighting in the editor --------------------------------- */
+
+/*
+  Off by default, toggled from the Writing panel. Tints rather than blocks of
+  colour, so the words stay the thing you are reading. Colour is never the only
+  signal: a hard sentence also carries an underline, because a reader who
+  cannot distinguish the tints would otherwise see nothing at all.
+*/
+.ph--hard { background: color-mix(in srgb, #f6c744 34%, transparent); }
+.ph--very-hard { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.ph--adverb { background: color-mix(in srgb, #4f9bd9 24%, transparent); }
+.ph--passive { background: color-mix(in srgb, #52b788 26%, transparent); }
+.ph--wordy {
+  background: color-mix(in srgb, #a982d1 26%, transparent);
+  cursor: help;
+}
+.ph--hard, .ph--very-hard {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--fg) 35%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+
+@media (prefers-contrast: more) {
+  /* Tints wash out; the underline is the signal that survives. */
+  .ph { background: none !important; text-decoration: underline; text-decoration-thickness: 2px; }
+  .ph--very-hard { text-decoration-style: double; }
+  .ph--adverb, .ph--passive, .ph--wordy { text-decoration-style: dotted; }
+}
+
+.highlight-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s2);
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+}
+.highlight-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.3rem;
+}
