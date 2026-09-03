@@ -5,6 +5,7 @@ import { SubscriberRowActions } from "@/components/admin/SubscriberRowActions";
 import { loadNewsletterSettings } from "@/lib/email/config";
 import { formatDate } from "@/lib/site";
 import {
+  countSubscribers,
   countSubscribersByStatus,
   getAcquisitionSources,
   getGrowthSeries,
@@ -15,10 +16,14 @@ import {
   type SubscriberCounts,
 } from "@/lib/subscribers";
 import { SUBSCRIBER_STATUSES, type SubscriberStatus } from "@/db/schema";
+import { AdminPager, parsePage } from "@/components/admin/AdminPager";
+
+/** Addresses are one short row each. */
+const PER_PAGE = 50;
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ status?: string; q?: string }>;
+type SearchParams = Promise<{ status?: string; q?: string; page?: string }>;
 
 function parseStatus(value: string | undefined): SubscriberStatus | undefined {
   return SUBSCRIBER_STATUSES.includes(value as SubscriberStatus)
@@ -31,8 +36,9 @@ export default async function AdminSubscribersPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { status, q } = await searchParams;
+  const { status, q, page } = await searchParams;
   const filter = parseStatus(status);
+  const currentPage = parsePage(page);
 
   let rows: SerializedSubscriber[] = [];
   let counts: SubscriberCounts = {
@@ -46,16 +52,23 @@ export default async function AdminSubscribersPage({
   let growth: GrowthPoint[] = [];
   let sources: AcquisitionSource[] = [];
   let newsletterOn = false;
+  let matching = 0;
   let error: string | null = null;
 
   try {
     const db = getDb();
-    [rows, counts, growth, sources, newsletterOn] = await Promise.all([
-      listSubscribers(db, { status: filter, search: q, limit: 200 }),
+    [rows, counts, growth, sources, newsletterOn, matching] = await Promise.all([
+      listSubscribers(db, {
+        status: filter,
+        search: q,
+        limit: PER_PAGE,
+        offset: (currentPage - 1) * PER_PAGE,
+      }),
       countSubscribersByStatus(db),
       getGrowthSeries(db, 30),
       getAcquisitionSources(db),
       loadNewsletterSettings(db).then((settings) => settings.enabled),
+      countSubscribers(db, { status: filter, search: q }),
     ]);
   } catch (cause) {
     error = cause instanceof Error ? cause.message : "Could not reach the database";
@@ -124,7 +137,7 @@ export default async function AdminSubscribersPage({
         <div className="dashboard-main">
           <div className="panel">
             <h2 className="label">
-              {filter ? `${filter} · ${rows.length}` : `Everyone · ${rows.length}`}
+              {filter ? `${filter} · ${matching}` : `Everyone · ${matching}`}
             </h2>
             {rows.length === 0 ? (
               <p className="muted">
@@ -167,6 +180,15 @@ export default async function AdminSubscribersPage({
                 </table>
               </div>
             )}
+
+            <AdminPager
+              page={currentPage}
+              total={matching}
+              perPage={PER_PAGE}
+              basePath="/admin/subscribers"
+              params={{ status, q }}
+              noun="subscribers"
+            />
           </div>
         </div>
 

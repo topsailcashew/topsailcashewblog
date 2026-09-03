@@ -8,13 +8,29 @@ import { NavLinks } from "./NavLinks";
  * About is a database-backed page rather than a hardcoded route, so the copy
  * behind it is editable from the admin.
  *
- * The Newsletter and Contact pages still exist and still answer at their URLs
- * — they are simply not linked from here. Deleting them would throw away copy
- * that was written, and a page can be linked again in one line.
+ * The nav stays at two links plus search: this is a blog, and the top of every
+ * page is not the place to sell a mailing list. The standing offers live in the
+ * footer instead, where a reader who has reached the bottom of something can
+ * find them.
  */
 const NAV_LINKS = [
   { href: "/articles", label: "Articles" },
   { href: "/about", label: "About" },
+] as const;
+
+/**
+ * The footer carries more than the nav.
+ *
+ * Series had no entry point anywhere — `/series` did not exist and a sequence
+ * was reachable only from the "Part N of M" line on a post you had already
+ * found. Newsletter had none either, which meant a reader who wanted one had
+ * no way to discover there was one.
+ */
+const FOOTER_LINKS = [
+  { href: "/articles", label: "Articles" },
+  { href: "/series", label: "Series" },
+  { href: "/about", label: "About" },
+  { href: "/newsletter", label: "Newsletter" },
 ] as const;
 
 /**
@@ -51,7 +67,7 @@ export function ReadingFooter() {
     <footer className="site-footer-plain">
       <span className="footer-mark">{siteConfig.name}</span>
       <nav className="footer-links" aria-label="Footer">
-        {NAV_LINKS.map((link) => (
+        {FOOTER_LINKS.map((link) => (
           <Link key={link.href} href={link.href}>
             {link.label}
           </Link>

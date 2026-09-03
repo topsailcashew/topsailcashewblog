@@ -1938,3 +1938,65 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .search-suggest-heading { margin-bottom: var(--s4); }
 /* The form is an offer, not the answer to the search — it follows the reading. */
 .search-empty ~ .subscribe { margin-top: var(--s7); }
+
+/* --- archive filters, series index, pagers ------------------------------ */
+
+/*
+  The filter bar sits between the page head and the grid. Links, not buttons:
+  every filter is a URL that already had a page behind it, so a filtered view
+  can be shared and a crawler can follow it — which is how tag and series pages
+  get discovered at all.
+*/
+.archive-filters {
+  display: grid;
+  gap: var(--s4);
+  margin-bottom: var(--s6);
+  padding-bottom: var(--s5);
+  border-bottom: 1px solid var(--border);
+}
+.archive-filter-group { display: grid; gap: var(--s2); }
+.archive-filter-group .label { margin: 0; }
+.archive-filter-group .label a { color: inherit; }
+.archive-filter-list { display: flex; flex-wrap: wrap; gap: var(--s2); }
+
+/* --- series index -------------------------------------------------------- */
+
+.series-index { list-style: none; margin: var(--s6) 0 0; padding: 0; max-width: var(--measure); }
+.series-index li { border-bottom: 1px solid var(--border); }
+.series-index-link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s4) 0;
+  text-decoration: none;
+  color: inherit;
+}
+.series-index-link:hover .series-index-title { color: var(--accent-ink); }
+.series-index-title { font-family: var(--serif); font-size: var(--text-xl); font-weight: 600; }
+.series-index-back { margin-top: var(--s6); }
+.series-index-back a { color: var(--accent-ink); }
+
+/* --- newsletter page ----------------------------------------------------- */
+
+.newsletter-terms { max-width: var(--measure); margin-top: var(--s7); }
+.newsletter-terms ul { margin: var(--s3) 0 0; padding-left: var(--s4); }
+.newsletter-terms li { margin-bottom: var(--s2); font-size: var(--text-base); line-height: 1.6; }
+.newsletter-recent-heading { margin: var(--s8) 0 var(--s4); }
+
+/* --- admin pager --------------------------------------------------------- */
+
+.admin-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-top: var(--s5);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--border);
+}
+/* Keeps "Previous" and "Next" in place when only one of them is rendered. */
+.admin-pager .row { gap: var(--s3); }
+
+.media-more { display: flex; justify-content: center; margin-top: var(--s5); }

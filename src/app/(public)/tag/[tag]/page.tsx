@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
-import { JsonLd } from "@/components/public/JsonLd";
-import { PostGrid } from "@/components/public/PostGrid";
-import { getFeed, getTagName, listPublishedTagSlugs } from "@/lib/public-posts";
-import { postListJsonLd } from "@/lib/structured-data";
+import { TagArchive } from "@/components/public/archives";
+import { getTagName, listPublishedTagSlugs } from "@/lib/public-posts";
 
 /* Five-minute window so scheduled posts surface promptly — see app/(public)/page.tsx. */
 export const revalidate = 300;
@@ -37,34 +34,5 @@ export async function generateMetadata({
 
 export default async function TagPage({ params }: { params: Params }) {
   const { tag } = await params;
-
-  // A tag with no published posts 404s rather than rendering an empty page:
-  // it is indistinguishable from a tag that never existed, and an empty page
-  // is something search engines would index for no reason.
-  const name = await getTagName(getDb(), tag);
-  if (!name) notFound();
-
-  const feed = await getFeed(getDb(), 1, tag);
-  if (feed.posts.length === 0) notFound();
-
-  return (
-    // Same 3-column grid as the homepage (§7).
-    <div className="shell-wrap" id="content">
-      <JsonLd
-        json={postListJsonLd(feed.posts, {
-          name: `Tagged ${name}`,
-          path: `/tag/${tag}`,
-          description: `Everything tagged ${name}.`,
-        })}
-      />
-      <div className="page-head">
-        <p className="label">Tagged</p>
-        <h1>{name}</h1>
-        <p>
-          {feed.totalPosts} {feed.totalPosts === 1 ? "post" : "posts"}
-        </p>
-      </div>
-      <PostGrid posts={feed.posts} />
-    </div>
-  );
+  return <TagArchive tag={tag} page={1} />;
 }

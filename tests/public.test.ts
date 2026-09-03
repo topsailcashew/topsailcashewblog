@@ -103,7 +103,7 @@ describe(
           tags: ["Shared"],
         });
 
-        const feed = await getFeed(db(), 1, "shared");
+        const feed = await getFeed(db(), 1, { tag: "shared" });
         assert.deepEqual(feed.posts.map((p) => p.slug), ["live"]);
         assert.equal(feed.totalPosts, 1);
       });

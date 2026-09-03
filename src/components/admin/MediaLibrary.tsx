@@ -23,24 +23,41 @@ export function MediaLibrary() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (search: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const url = search.trim()
-        ? `/api/media?q=${encodeURIComponent(search.trim())}`
-        : "/api/media";
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Could not load media (${response.status})`);
-      const body = (await response.json()) as { media: UploadedMedia[]; total: number };
-      setItems(body.media);
-      setTotal(body.total);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load media");
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+  /**
+   * Fetches a page of the library.
+   *
+   * `append` is what makes "Load more" work: the API has always accepted
+   * `?offset=` and returned a true `total`, but this component only ever asked
+   * for the first page — so with 84 uploads it rendered "84 images" above a
+   * grid of 60 and there was no way to reach the rest.
+   */
+  const load = useCallback(
+    async (search: string, offset = 0, append = false) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+        if (search.trim()) params.set("q", search.trim());
+        if (offset > 0) params.set("offset", String(offset));
+        const query = params.toString();
+
+        const response = await fetch(query ? `/api/media?${query}` : "/api/media");
+        if (!response.ok) throw new Error(`Could not load media (${response.status})`);
+
+        const body = (await response.json()) as {
+          media: UploadedMedia[];
+          total: number;
+        };
+        setItems((current) => (append ? [...current, ...body.media] : body.media));
+        setTotal(body.total);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Could not load media");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     // Debounced so typing does not fire a request per keystroke.
@@ -230,6 +247,19 @@ export function MediaLibrary() {
           </li>
         ))}
       </ul>
+
+      {items.length < total && (
+        <div className="media-more">
+          <button
+            type="button"
+            className="btn btn--small"
+            disabled={busy}
+            onClick={() => void load(query, items.length, true)}
+          >
+            {busy ? "Loading…" : `Load ${Math.min(60, total - items.length)} more`}
+          </button>
+        </div>
+      )}
 
       {selected && (
         <MediaDetail

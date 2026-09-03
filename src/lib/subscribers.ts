@@ -245,6 +245,36 @@ export async function listSubscribers(
   return rows.map(serializeSubscriber);
 }
 
+/**
+ * How many subscribers match a filter — including the search box.
+ *
+ * `countSubscribersByStatus` groups by status and knows nothing about `?q=`,
+ * so a searched list could only ever report the number of rows it had fetched.
+ * This mirrors `listSubscribers`' where-clause exactly, which is what makes
+ * the pager's "1–50 of 240" true rather than decorative.
+ */
+export async function countSubscribers(
+  db: BlogDatabase,
+  options: { status?: SubscriberStatus; search?: string } = {},
+): Promise<number> {
+  const term = options.search?.trim();
+  const [row] = await db
+    .select({ value: sql<number>`count(*)::int` })
+    .from(subscribers)
+    .where(
+      and(
+        options.status ? eq(subscribers.status, options.status) : undefined,
+        term
+          ? or(
+              ilike(subscribers.email, `%${term}%`),
+              ilike(subscribers.name, `%${term}%`),
+            )
+          : undefined,
+      ),
+    );
+  return row?.value ?? 0;
+}
+
 export type SubscriberCounts = Record<SubscriberStatus, number> & { total: number };
 
 export async function countSubscribersByStatus(

@@ -7,6 +7,7 @@ import {
   getFeed,
   searchPublished,
   type PostSummary,
+  type SearchPage,
 } from "@/lib/public-posts";
 
 /** Results depend on the query string, so there is nothing to pre-render. */
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true },
 };
 
-type SearchParams = Promise<{ q?: string }>;
+type SearchParams = Promise<{ q?: string; page?: string }>;
 
 /** How many pieces to offer when a search comes back empty. */
 const SUGGESTION_COUNT = 3;
@@ -28,15 +29,17 @@ export default async function SearchPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { q } = await searchParams;
+  const { q, page } = await searchParams;
   const query = (q ?? "").trim();
+  const requested = Number(page);
+  const currentPage = Number.isInteger(requested) && requested > 0 ? requested : 1;
   const db = getDb();
 
-  let results: Awaited<ReturnType<typeof searchPublished>> = [];
+  let found: SearchPage = { results: [], page: currentPage, total: 0, totalPages: 1 };
   let failed = false;
   if (query !== "") {
     try {
-      results = await searchPublished(db, query);
+      found = await searchPublished(db, query, currentPage);
     } catch {
       // websearch_to_tsquery tolerates almost anything, but a malformed query
       // should read as "no results", never as a stack trace.
@@ -50,7 +53,7 @@ export default async function SearchPage({
     the archive is small enough that "here is what else is here" is a better
     answer than an apology.
   */
-  const nothingToShow = results.length === 0;
+  const nothingToShow = found.results.length === 0;
   const suggestions = nothingToShow ? await suggestedReading(db) : [];
 
   return (
@@ -99,10 +102,17 @@ export default async function SearchPage({
       ) : (
         <>
           <p className="meta search-count">
-            {results.length} {results.length === 1 ? "result" : "results"} for{" "}
+            {found.total} {found.total === 1 ? "result" : "results"} for{" "}
             <strong>{query}</strong>
+            {found.totalPages > 1 && ` · page ${found.page} of ${found.totalPages}`}
           </p>
-          <PostGrid posts={results} />
+          <PostGrid posts={found.results} />
+          {/*
+            `?page=` rather than `/page/N`: this page is already noindex, so
+            there is nothing for a crawler to follow, and the query has to ride
+            along in the URL anyway.
+          */}
+          <SearchPagination query={query} page={found.page} totalPages={found.totalPages} />
         </>
       )}
     </div>
@@ -134,4 +144,41 @@ async function suggestedReading(db: ReturnType<typeof getDb>): Promise<PostSumma
     // The suggestions are a courtesy; the search box above still works.
     return [];
   }
+}
+
+/** Prev/next that carry the query with them. */
+function SearchPagination({
+  query,
+  page,
+  totalPages,
+}: {
+  query: string;
+  page: number;
+  totalPages: number;
+}) {
+  if (totalPages <= 1) return null;
+  const href = (target: number) =>
+    `/search?q=${encodeURIComponent(query)}${target > 1 ? `&page=${target}` : ""}`;
+
+  return (
+    <nav className="pagination" aria-label="Search result pages">
+      {page > 1 ? (
+        <a href={href(page - 1)} rel="prev">
+          ← Newer
+        </a>
+      ) : (
+        <span />
+      )}
+      <span className="pagination-position">
+        Page {page} of {totalPages}
+      </span>
+      {page < totalPages ? (
+        <a href={href(page + 1)} rel="next">
+          Older →
+        </a>
+      ) : (
+        <span />
+      )}
+    </nav>
+  );
 }

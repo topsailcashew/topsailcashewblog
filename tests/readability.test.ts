@@ -125,20 +125,20 @@ describe(
 
     it("still prefers an exact full-text match", async () => {
       await seed();
-      const results = await searchPublished(db(), "slow software");
+      const { results } = await searchPublished(db(), "slow software");
       assert.equal(results[0]?.title, "Notes on slow software");
     });
 
     it("finds a post through a transposed pair of letters", async () => {
       await seed();
       // "slwo" stems to a word in no document, so full-text returns nothing.
-      const results = await searchPublished(db(), "slwo software");
+      const { results } = await searchPublished(db(), "slwo software");
       assert.equal(results[0]?.title, "Notes on slow software", "trigram fallback missed");
     });
 
     it("finds a post through a dropped letter in the excerpt", async () => {
       await seed();
-      const results = await searchPublished(db(), "personalty");
+      const { results } = await searchPublished(db(), "personalty");
       assert.equal(results[0]?.title, "New Paths");
     });
 
@@ -146,7 +146,7 @@ describe(
       await seed();
       // The fallback must not become "always return something" — a confident
       // wrong answer is worse than the empty state the page now renders.
-      assert.deepEqual(await searchPublished(db(), "qwertyuiop zxcvbnm"), []);
+      assert.deepEqual((await searchPublished(db(), "qwertyuiop zxcvbnm")).results, []);
     });
 
     it("does not match a query buried inside a longer word", async () => {
@@ -171,7 +171,7 @@ describe(
 
       for (const nonsense of ["zzzznothing", "xylophone", "asdfgh"]) {
         assert.deepEqual(
-          await searchPublished(db(), nonsense),
+          (await searchPublished(db(), nonsense)).results,
           [],
           `"${nonsense}" matched something it should not have`,
         );
@@ -190,7 +190,7 @@ describe(
         ["personalty", "New Paths"],
         ["slwo software", "Notes on slow software"],
       ] as const) {
-        const results = await searchPublished(db(), typo);
+        const { results } = await searchPublished(db(), typo);
         assert.equal(results[0]?.title, expected, `"${typo}" found nothing`);
       }
     });
@@ -202,7 +202,7 @@ describe(
         content_html: "<p>Draft.</p>",
         status: "draft",
       });
-      assert.deepEqual(await searchPublished(db(), "unpublishd thoughts"), []);
+      assert.deepEqual((await searchPublished(db(), "unpublishd thoughts")).results, []);
     });
   },
 );

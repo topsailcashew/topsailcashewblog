@@ -86,7 +86,7 @@ describe(
 
       const slugs = await listPublishedSeriesSlugs(db());
       assert.deepEqual(slugs, ["live-one"]);
-      assert.deepEqual(await getSeriesPosts(db(), "empty-one"), []);
+      assert.deepEqual((await getSeriesPosts(db(), "empty-one")).posts, []);
     });
 
     it("gives colliding titles distinct slugs", async () => {
@@ -138,33 +138,33 @@ describe(
       await seedPost({ title: "B", slug: "b", excerpt: "About the heron" });
       await seedPost({ title: "C", slug: "c", html: "<p>A passage mentioning cormorants.</p>" });
 
-      assert.deepEqual((await searchPublished(db(), "kingfisher")).map((r) => r.slug), ["a"]);
-      assert.deepEqual((await searchPublished(db(), "heron")).map((r) => r.slug), ["b"]);
-      assert.deepEqual((await searchPublished(db(), "cormorants")).map((r) => r.slug), ["c"]);
+      assert.deepEqual((await searchPublished(db(), "kingfisher")).results.map((r) => r.slug), ["a"]);
+      assert.deepEqual((await searchPublished(db(), "heron")).results.map((r) => r.slug), ["b"]);
+      assert.deepEqual((await searchPublished(db(), "cormorants")).results.map((r) => r.slug), ["c"]);
     });
 
     it("ranks a title match above a body-only match", async () => {
       await seedPost({ title: "Body mention", slug: "body", html: "<p>estuary</p>" });
       await seedPost({ title: "Estuary", slug: "title", html: "<p>unrelated</p>" });
 
-      const results = await searchPublished(db(), "estuary");
+      const { results } = await searchPublished(db(), "estuary");
       assert.deepEqual(results.map((r) => r.slug), ["title", "body"]);
     });
 
     it("never returns a draft", async () => {
       await seedPost({ title: "Secret kingfisher", slug: "secret", status: "draft" });
-      assert.deepEqual(await searchPublished(db(), "kingfisher"), []);
+      assert.deepEqual((await searchPublished(db(), "kingfisher")).results, []);
     });
 
     it("ignores markup so a tag name is not a search term", async () => {
       await seedPost({ title: "Plain", slug: "plain", html: '<p class="blockquote">text</p>' });
-      assert.deepEqual(await searchPublished(db(), "blockquote"), []);
+      assert.deepEqual((await searchPublished(db(), "blockquote")).results, []);
     });
 
     it("returns nothing for an empty or whitespace query", async () => {
       await seedPost({ title: "Anything", slug: "anything" });
-      assert.deepEqual(await searchPublished(db(), ""), []);
-      assert.deepEqual(await searchPublished(db(), "   "), []);
+      assert.deepEqual((await searchPublished(db(), "")).results, []);
+      assert.deepEqual((await searchPublished(db(), "   ")).results, []);
     });
 
     it("survives punctuation a reader might type", async () => {

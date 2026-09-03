@@ -42,7 +42,7 @@ describe(
       assert.equal((await getFeed(db(), 1)).totalPosts, 0);
       assert.equal(await getPublishedPost(db(), post.slug), null);
       assert.deepEqual(await listPublishedSlugs(db()), []);
-      assert.deepEqual(await searchPublished(db(), "findable"), []);
+      assert.deepEqual((await searchPublished(db(), "findable")).results, []);
     });
 
     it("keeps the row, its tags and its revisions", async () => {

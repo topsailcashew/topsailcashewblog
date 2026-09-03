@@ -718,8 +718,9 @@ same bindings and same APIs as production, but not your account's.
 
 ### Worker size
 
-The dry run reports **2910 KiB gzipped** against Cloudflare's 3 MB free-plan
-limit — about **162 KiB of headroom**. The webfonts ship as static assets,
+The dry run reports **2603 KiB gzipped** against Cloudflare's 3 MB free-plan
+limit — about **469 KiB of headroom**, since `scripts/strip-og-wasm.ts` began
+removing the OG-image WebAssembly the proxy bundle never runs. The webfonts ship as static assets,
 which are uploaded separately and do not count toward the Worker script.
 
 Phase 4 nearly broke this. Generating Open Graph images inside the Worker
@@ -1746,6 +1747,72 @@ Check the number before deploying:
 ```bash
 npx wrangler deploy --dry-run --outdir /tmp/dryrun
 ```
+
+## Archives and pagination
+
+Every public list is one page of twelve with a `<Pagination>` beneath it, and
+every one of them passes `basePath` — a prop the component had implemented
+since it was written and which no caller had ever supplied. The symptom was
+`/articles` whose "Older →" pointed at `/page/2`, a different archive
+entirely; `/tag/[tag]` had no pager at all and capped silently at twelve while
+printing the true total above the grid.
+
+The bodies live in `src/components/public/archives.tsx` — `ArticlesArchive`,
+`TagArchive`, `SeriesArchive` — each rendered by two routes (`/articles` and
+`/articles/page/2`, and the same for tags and series). Keeping the body in one
+place is what stops those pairs drifting, which is how the original bug got in.
+
+`getFeed`'s third argument is a `FeedFilter` (`{ tag?, series? }`) whose clauses
+are **EXISTS subqueries rather than joins**. A join works for one filter and
+starts returning duplicate rows for two, because a post carries several tags —
+and then the count disagrees with the page.
+
+`/series` did not exist before this. A sequence written to be read in order was
+reachable only from the "Part N of M" line on a post you had already found.
+`listPublishedSeries` in `public-posts.ts` is the public-facing count, composing
+the same `publishedOnly` predicate as everything else in that file — `listSeries`
+in `series.ts` counts `status = 'published'`, which includes a scheduled post and
+a trashed one, and on a public bar that would link to a series that 404s.
+
+Series pages ascend. A series is read from the beginning, so "page 2" is the
+next instalments rather than older ones — which also means publishing part six
+does not renumber parts one to five.
+
+Search pages on `?page=` rather than `/page/N`, because the page is already
+`noindex` and the query has to ride in the URL anyway. It returns a `SearchPage`
+with a true `total`: the old page printed `{results.length} results`, so a query
+matching forty posts reported twenty-five. The trigram fallback only runs for
+page 1 — it is a different result set with a different ordering, and paging into
+it from an exhausted full-text query would swap one for the other mid-navigation.
+
+Admin lists page through `src/components/admin/AdminPager.tsx` on `?page=`, so a
+`?status=` or `?q=` filter survives turning the page. Media has a "Load more"
+instead, since it is already a client-side grid holding `total`.
+
+## Where a reader subscribes
+
+Three standing places, and no interruption anywhere:
+
+- **`/newsletter`** — a filesystem route, which wins over the database page of
+  the same slug (the arrangement `/about` already uses). It replaced a seeded
+  page whose body read *"There is no mailing list yet… Subscribe at /rss.xml"* —
+  static copy that never consulted settings, so it went on saying that after the
+  newsletter was switched on. This page reads `enabled`, so it cannot say the
+  wrong thing; with the newsletter off it says there is no list rather than
+  advertising RSS as a permanent substitute.
+- **The footer**, which now carries Series and Newsletter alongside Articles,
+  About and RSS. The nav stays at two links plus search: the top of every page
+  is not the place to sell a mailing list.
+- **After a post**, where it already was.
+
+`loadNewsletterSettings` is wrapped in React's `cache()` because
+`SubscribeSection` reads it and now appears more than once in a render.
+
+One trap worth knowing: enabling signups with no mail server configured stores
+subscribers, sends no confirmation, and — with double opt-in on by default —
+strands every one of them in `pending` forever, with a `console.warn` as the
+only evidence. The settings screen now warns about that combination rather than
+leaving it to be discovered.
 
 ## Decisions
 

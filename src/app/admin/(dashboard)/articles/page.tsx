@@ -4,11 +4,15 @@ import { EmptyTrashButton } from "@/components/admin/EmptyTrashButton";
 import { PostRowActions } from "@/components/admin/PostRowActions";
 import { PostStatusBadge, postStatusLabel } from "@/components/admin/PostStatusBadge";
 import { countPostsByStatus, listPosts, type SerializedPost } from "@/lib/posts";
+import { AdminPager, parsePage } from "@/components/admin/AdminPager";
 import { POST_LIST_FILTERS, type PostListFilter } from "@/lib/validation";
+
+/** Matches the public feed's page size, so the two read the same way. */
+const PER_PAGE = 25;
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ status?: string }>;
+type SearchParams = Promise<{ status?: string; page?: string }>;
 
 function parseFilter(value: string | undefined): PostListFilter | undefined {
   return POST_LIST_FILTERS.includes(value as PostListFilter)
@@ -21,8 +25,9 @@ export default async function AdminArticlesPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { status } = await searchParams;
+  const { status, page } = await searchParams;
   const filter = parseFilter(status);
+  const currentPage = parsePage(page);
   const inTrash = filter === "trash";
 
   let posts: SerializedPost[] = [];
@@ -31,7 +36,11 @@ export default async function AdminArticlesPage({
   try {
     const db = getDb();
     [posts, counts] = await Promise.all([
-      listPosts(db, { status: filter, limit: 100, offset: 0 }),
+      listPosts(db, {
+        status: filter,
+        limit: PER_PAGE,
+        offset: (currentPage - 1) * PER_PAGE,
+      }),
       countPostsByStatus(db),
     ]);
   } catch (cause) {
@@ -117,6 +126,15 @@ export default async function AdminArticlesPage({
           </li>
         ))}
       </ul>
+
+      <AdminPager
+        page={currentPage}
+        total={inTrash ? counts.trash : filter ? counts[filter] : counts.published + counts.draft}
+        perPage={PER_PAGE}
+        basePath="/admin/articles"
+        params={{ status }}
+        noun="articles"
+      />
     </main>
   );
 }

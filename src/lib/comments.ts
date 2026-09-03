@@ -228,13 +228,15 @@ export async function listForModeration(
   db: BlogDatabase,
   status?: CommentStatus,
   limit = 200,
+  offset = 0,
 ): Promise<ModerationComment[]> {
   const rows = await db
     .select()
     .from(comments)
     .where(status ? eq(comments.status, status) : undefined)
     .orderBy(desc(comments.createdAt))
-    .limit(limit);
+    .limit(limit)
+    .offset(offset);
   return withPostContext(db, rows);
 }
 

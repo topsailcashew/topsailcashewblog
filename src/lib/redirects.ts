@@ -60,13 +60,23 @@ export async function findRedirect(
   return row?.toPath ?? null;
 }
 
+/**
+ * Bounded, because this table grows on its own.
+ *
+ * Every slug change writes a row and nothing removes them, so an unbounded
+ * select is a query whose cost rises with the age of the blog — and the whole
+ * result was being sent to the browser in one go. 500 is far more than anyone
+ * will scroll; the manager's own search is the way to find an old one.
+ */
 export async function listRedirects(
   db: BlogDatabase,
+  limit = 500,
 ): Promise<SerializedRedirect[]> {
   const rows = await db
     .select()
     .from(redirects)
-    .orderBy(desc(redirects.createdAt));
+    .orderBy(desc(redirects.createdAt))
+    .limit(limit);
   return rows.map(serialize);
 }
 

@@ -7,11 +7,12 @@ import {
   listForModeration,
   type CommentStatus,
 } from "@/lib/comments";
+import { AdminPager, parsePage } from "@/components/admin/AdminPager";
 import { formatDate } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ status?: string }>;
+type SearchParams = Promise<{ status?: string; page?: string }>;
 
 function parseStatus(value: string | undefined): CommentStatus | undefined {
   return COMMENT_STATUSES.includes(value as CommentStatus)
@@ -19,12 +20,16 @@ function parseStatus(value: string | undefined): CommentStatus | undefined {
     : undefined;
 }
 
+/** Comments are short; more fit on a screen than posts do. */
+const PER_PAGE = 50;
+
 export default async function CommentsPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const { status } = await searchParams;
+  const { status, page } = await searchParams;
+  const currentPage = parsePage(page);
   // Default to the queue that needs attention rather than everything.
   const filter = parseStatus(status) ?? (status === "all" ? undefined : "pending");
 
@@ -35,7 +40,7 @@ export default async function CommentsPage({
 
   try {
     [comments, counts] = await Promise.all([
-      listForModeration(db, filter),
+      listForModeration(db, filter, PER_PAGE, (currentPage - 1) * PER_PAGE),
       countByStatus(db),
     ]);
   } catch (cause) {
@@ -124,6 +129,19 @@ export default async function CommentsPage({
           </li>
         ))}
       </ul>
+
+      <AdminPager
+        page={currentPage}
+        total={
+          filter
+            ? counts[filter]
+            : Object.values(counts).reduce((sum, value) => sum + value, 0)
+        }
+        perPage={PER_PAGE}
+        basePath="/admin/comments"
+        params={{ status }}
+        noun="comments"
+      />
     </main>
   );
 }

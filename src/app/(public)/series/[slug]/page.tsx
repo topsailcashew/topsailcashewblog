@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
-import { PostGrid } from "@/components/public/PostGrid";
-import { getSeriesPosts, listPublishedSeriesSlugs } from "@/lib/public-posts";
+import { SeriesArchive } from "@/components/public/archives";
+import { listPublishedSeriesSlugs } from "@/lib/public-posts";
 import { getSeriesBySlug } from "@/lib/series";
 
 /* Five-minute window so scheduled posts surface promptly — see app/(public)/page.tsx. */
@@ -36,26 +35,5 @@ export async function generateMetadata({
 
 export default async function SeriesPage({ params }: { params: Params }) {
   const { slug } = await params;
-  const db = getDb();
-
-  const found = await getSeriesBySlug(db, slug);
-  if (!found) notFound();
-
-  // A series with nothing published yet is not something to show a reader.
-  const posts = await getSeriesPosts(db, slug);
-  if (posts.length === 0) notFound();
-
-  return (
-    <div className="shell-wrap" id="content">
-      <div className="page-head">
-        <p className="label">Series</p>
-        <h1>{found.title}</h1>
-        {found.description && <p>{found.description}</p>}
-        <p>
-          {posts.length} {posts.length === 1 ? "part" : "parts"}, in reading order
-        </p>
-      </div>
-      <PostGrid posts={posts} />
-    </div>
-  );
+  return <SeriesArchive slug={slug} page={1} />;
 }

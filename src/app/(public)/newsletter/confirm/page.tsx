@@ -55,7 +55,7 @@ export default async function ConfirmPage({
             come from an email we sent. Subscribing again will send a fresh one.
           </p>
           <p>
-            <Link href="/">Back to the writing</Link>
+            <Link href="/newsletter">Subscribe again →</Link>
           </p>
         </>
       )}

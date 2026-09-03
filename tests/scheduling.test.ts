@@ -68,7 +68,7 @@ describe(
         ["now"],
       );
       assert.deepEqual(
-        (await searchPublished(db(), "later")).map((post) => post.slug),
+        (await searchPublished(db(), "later")).results.map((post) => post.slug),
         [],
       );
     });

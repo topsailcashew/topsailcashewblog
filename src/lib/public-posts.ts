@@ -52,34 +52,60 @@ export type Feed = {
   totalPosts: number;
 };
 
+/**
+ * What a feed can be narrowed to.
+ *
+ * Both may be set at once — /tag/x inside a series is a coherent question,
+ * even if nothing links to it yet.
+ */
+export type FeedFilter = { tag?: string; series?: string };
+
+/**
+ * The filter clauses, as EXISTS rather than joins.
+ *
+ * A join would work for one filter and start returning duplicate rows for two,
+ * because a post can carry several tags; the count query would then disagree
+ * with the page. EXISTS asks the only question being asked — "is there such a
+ * tag on this post" — and composes with itself for free.
+ */
+function feedWhere(filter?: FeedFilter) {
+  const clauses = [publishedOnly];
+
+  if (filter?.tag) {
+    clauses.push(sql`exists (
+      select 1 from ${postTags}
+      join ${tags} on ${tags.id} = ${postTags.tagId}
+      where ${postTags.postId} = ${posts.id} and ${tags.slug} = ${filter.tag}
+    )`);
+  }
+  if (filter?.series) {
+    clauses.push(sql`exists (
+      select 1 from ${series}
+      where ${series.id} = ${posts.seriesId} and ${series.slug} = ${filter.series}
+    )`);
+  }
+
+  return and(...clauses);
+}
+
 export async function getFeed(
   db: BlogDatabase,
   page = 1,
-  tagSlug?: string,
+  filter?: FeedFilter,
 ): Promise<Feed> {
   const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
   const offset = (safePage - 1) * POSTS_PER_PAGE;
+  const where = feedWhere(filter);
 
   const [rows, total] = await Promise.all([
-    tagSlug
-      ? db
-          .select({ post: posts })
-          .from(posts)
-          .innerJoin(postTags, eq(postTags.postId, posts.id))
-          .innerJoin(tags, eq(tags.id, postTags.tagId))
-          .where(and(publishedOnly, eq(tags.slug, tagSlug)))
-          .orderBy(...publishedOrder)
-          .limit(POSTS_PER_PAGE)
-          .offset(offset)
-          .then((result) => result.map((entry) => entry.post))
-      : db
-          .select()
-          .from(posts)
-          .where(publishedOnly)
-          .orderBy(...publishedOrder)
-          .limit(POSTS_PER_PAGE)
-          .offset(offset),
-    countPublished(db, tagSlug),
+    db
+      .select()
+      .from(posts)
+      .where(where)
+      .orderBy(...publishedOrder)
+      .limit(POSTS_PER_PAGE)
+      .offset(offset),
+    countPublished(db, filter),
   ]);
 
   const tagsByPost = await getTagsForPosts(
@@ -99,19 +125,12 @@ export async function getFeed(
 
 export async function countPublished(
   db: BlogDatabase,
-  tagSlug?: string,
+  filter?: FeedFilter,
 ): Promise<number> {
-  if (!tagSlug) {
-    const [row] = await db.select({ value: count() }).from(posts).where(publishedOnly);
-    return row?.value ?? 0;
-  }
-
   const [row] = await db
     .select({ value: count() })
     .from(posts)
-    .innerJoin(postTags, eq(postTags.postId, posts.id))
-    .innerJoin(tags, eq(tags.id, postTags.tagId))
-    .where(and(publishedOnly, eq(tags.slug, tagSlug)));
+    .where(feedWhere(filter));
   return row?.value ?? 0;
 }
 
@@ -137,6 +156,21 @@ export const SEARCH_LIMIT = 25;
 export type SearchResult = PostSummary & { rank: number };
 
 /**
+ * A page of results, with the count of *all* of them.
+ *
+ * The page used to print `{results.length} results`, which was really "up to
+ * 25" — a query matching forty posts reported twenty-five and offered no way
+ * to the rest. `total` is the honest number and `totalPages` is what the pager
+ * needs.
+ */
+export type SearchPage = {
+  results: SearchResult[];
+  page: number;
+  total: number;
+  totalPages: number;
+};
+
+/**
  * Full-text search over title, excerpt and body.
  *
  * `websearch_to_tsquery` is used rather than `plainto_tsquery` so a reader can
@@ -146,28 +180,57 @@ export type SearchResult = PostSummary & { rank: number };
 export async function searchPublished(
   db: BlogDatabase,
   query: string,
-): Promise<SearchResult[]> {
+  page = 1,
+): Promise<SearchPage> {
   const trimmed = query.trim();
-  if (trimmed === "") return [];
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  const empty: SearchPage = { results: [], page: safePage, total: 0, totalPages: 1 };
+  if (trimmed === "") return empty;
 
   const tsquery = sql`websearch_to_tsquery('english', ${trimmed})`;
   const rank = sql<number>`ts_rank(${posts.searchVector}, ${tsquery})`;
+  const matches = and(publishedOnly, sql`${posts.searchVector} @@ ${tsquery}`);
 
-  const rows = await db
-    .select({ post: posts, rank })
-    .from(posts)
-    .where(and(publishedOnly, sql`${posts.searchVector} @@ ${tsquery}`))
-    .orderBy(desc(rank), desc(posts.publishedAt))
-    .limit(SEARCH_LIMIT);
+  const [rows, totals] = await Promise.all([
+    db
+      .select({ post: posts, rank })
+      .from(posts)
+      .where(matches)
+      .orderBy(desc(rank), desc(posts.publishedAt))
+      .limit(SEARCH_LIMIT)
+      .offset((safePage - 1) * SEARCH_LIMIT),
+    db.select({ value: count() }).from(posts).where(matches),
+  ]);
 
-  // Nothing matched the words as spelled. Try again on how they are spelled.
-  if (rows.length === 0) return searchByTrigram(db, trimmed);
+  const total = totals[0]?.value ?? 0;
 
+  /*
+    Nothing matched the words as spelled. Try again on how they are spelled —
+    but only on the first page: the trigram fallback is a different result set
+    with a different ordering, and paging into it from an exhausted full-text
+    query would silently swap one for the other mid-navigation.
+  */
+  if (total === 0) {
+    return safePage === 1 ? searchByTrigram(db, trimmed) : empty;
+  }
+
+  return {
+    results: await withRanks(db, rows),
+    page: safePage,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / SEARCH_LIMIT)),
+  };
+}
+
+/** Attaches tags to a ranked row set. Shared by both search paths. */
+async function withRanks(
+  db: BlogDatabase,
+  rows: { post: typeof posts.$inferSelect; rank: number }[],
+): Promise<SearchResult[]> {
   const tagsByPost = await getTagsForPosts(
     db,
     rows.map((row) => row.post.id),
   );
-
   return rows.map((row) => ({
     ...toSummary(serializePost(row.post, tagsByPost.get(row.post.id) ?? [])),
     rank: Number(row.rank),
@@ -204,7 +267,7 @@ const TRIGRAM_THRESHOLD = 0.32;
 async function searchByTrigram(
   db: BlogDatabase,
   query: string,
-): Promise<SearchResult[]> {
+): Promise<SearchPage> {
   try {
     /*
       `strict_word_similarity`, not `word_similarity`.
@@ -234,41 +297,69 @@ async function searchByTrigram(
       .orderBy(desc(similarity), desc(posts.publishedAt))
       .limit(SEARCH_LIMIT);
 
-    const tagsByPost = await getTagsForPosts(
-      db,
-      rows.map((row) => row.post.id),
-    );
-
-    return rows.map((row) => ({
-      ...toSummary(serializePost(row.post, tagsByPost.get(row.post.id) ?? [])),
-      rank: Number(row.rank),
-    }));
+    const results = await withRanks(db, rows);
+    return {
+      results,
+      page: 1,
+      total: results.length,
+      totalPages: 1,
+    };
   } catch {
     // pg_trgm missing, or the query was something it could not handle. An
     // empty result is the honest answer and the page has a good empty state.
-    return [];
+    return { results: [], page: 1, total: 0, totalPages: 1 };
   }
 }
 
 /** Published posts in a series, earliest first — the order they were meant to be read. */
+/**
+ * One series, in reading order and one page at a time.
+ *
+ * Ascending, unlike every other feed: a series is meant to be read from the
+ * beginning, so "page 2" is the next instalments rather than older ones. That
+ * also means the page numbers are stable — publishing part six does not
+ * renumber parts one to five, which is what would happen with a newest-first
+ * ordering.
+ */
 export async function getSeriesPosts(
   db: BlogDatabase,
   seriesSlug: string,
-): Promise<PostSummary[]> {
-  const rows = await db
-    .select({ post: posts })
-    .from(posts)
-    .innerJoin(series, eq(series.id, posts.seriesId))
-    .where(and(publishedOnly, eq(series.slug, seriesSlug)))
-    .orderBy(asc(posts.publishedAt), asc(posts.id));
+  page = 1,
+): Promise<Feed> {
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  const offset = (safePage - 1) * POSTS_PER_PAGE;
+  const where = and(publishedOnly, eq(series.slug, seriesSlug));
 
+  const [rows, totals] = await Promise.all([
+    db
+      .select({ post: posts })
+      .from(posts)
+      .innerJoin(series, eq(series.id, posts.seriesId))
+      .where(where)
+      .orderBy(asc(posts.publishedAt), asc(posts.id))
+      .limit(POSTS_PER_PAGE)
+      .offset(offset),
+    db
+      .select({ value: count() })
+      .from(posts)
+      .innerJoin(series, eq(series.id, posts.seriesId))
+      .where(where),
+  ]);
+
+  const total = totals[0]?.value ?? 0;
   const tagsByPost = await getTagsForPosts(
     db,
     rows.map((row) => row.post.id),
   );
-  return rows.map((row) =>
-    toSummary(serializePost(row.post, tagsByPost.get(row.post.id) ?? [])),
-  );
+
+  return {
+    posts: rows.map((row) =>
+      toSummary(serializePost(row.post, tagsByPost.get(row.post.id) ?? [])),
+    ),
+    page: safePage,
+    totalPosts: total,
+    totalPages: Math.max(1, Math.ceil(total / POSTS_PER_PAGE)),
+  };
 }
 
 /** Series slugs with at least one published post — for pre-rendering. */
@@ -377,6 +468,32 @@ export async function getFeaturedPost(db: BlogDatabase): Promise<PostSummary | n
  * For the About page's "writes about" line, which should reflect what has
  * actually been written rather than a list someone has to maintain by hand.
  */
+/**
+ * Every series a reader can actually open, with a count they can trust.
+ *
+ * `listSeries` in src/lib/series.ts counts `status = 'published'`, which
+ * includes a scheduled post and a trashed one. That is defensible in the admin
+ * — the author wants to see what they have — but on a public filter bar it
+ * would advertise a count nobody can reach, and a series whose only post is
+ * scheduled would be a link straight to a 404. This composes `publishedOnly`
+ * instead, like every other query in this file.
+ */
+export async function listPublishedSeries(
+  db: BlogDatabase,
+): Promise<{ title: string; slug: string; count: number }[]> {
+  return db
+    .select({
+      title: series.title,
+      slug: series.slug,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(series)
+    .innerJoin(posts, eq(posts.seriesId, series.id))
+    .where(publishedOnly)
+    .groupBy(series.id, series.title, series.slug)
+    .orderBy(asc(series.title));
+}
+
 export async function listProminentTags(
   db: BlogDatabase,
   limit = 6,

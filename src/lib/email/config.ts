@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { BlogDatabase } from "@/db/client";
 import { decryptSecret, encryptSecret, getSetting, putSetting } from "../settings";
 import { siteConfig } from "../site";
@@ -83,15 +84,24 @@ export async function loadSmtpSettings(db: BlogDatabase): Promise<SmtpSettings> 
   };
 }
 
-export async function loadNewsletterSettings(
-  db: BlogDatabase,
-): Promise<NewsletterSettings> {
-  const stored = await getSetting<Partial<NewsletterSettings>>(
-    db,
-    NEWSLETTER_SETTINGS_KEY,
-  );
-  return { ...DEFAULT_NEWSLETTER, ...(stored ?? {}) };
-}
+/**
+ * Memoised per request.
+ *
+ * `SubscribeSection` reads this and now appears in several places on one
+ * render — the newsletter page, the end of an article, the search empty state.
+ * Without `cache()` each mount is its own round trip to Neon for the same
+ * jsonb row. `cache()` is React's request-scoped memo, so it dedupes within a
+ * render and never leaks between requests.
+ */
+export const loadNewsletterSettings = cache(
+  async (db: BlogDatabase): Promise<NewsletterSettings> => {
+    const stored = await getSetting<Partial<NewsletterSettings>>(
+      db,
+      NEWSLETTER_SETTINGS_KEY,
+    );
+    return { ...DEFAULT_NEWSLETTER, ...(stored ?? {}) };
+  },
+);
 
 export async function saveNewsletterSettings(
   db: BlogDatabase,

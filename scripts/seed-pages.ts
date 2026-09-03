@@ -26,14 +26,6 @@ const SEEDS: Seed[] = [
     ],
   },
   {
-    slug: "newsletter",
-    title: "Newsletter",
-    paragraphs: [
-      "There is no mailing list yet. In the meantime the RSS feed carries every post in full, and works in any reader.",
-      "Subscribe at /rss.xml.",
-    ],
-  },
-  {
     slug: "contact",
     title: "Contact",
     paragraphs: [
