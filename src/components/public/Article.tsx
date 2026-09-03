@@ -3,13 +3,20 @@ import type { ReactNode } from "react";
 import type { SerializedPost } from "@/lib/posts";
 import { readingMinutes } from "@/lib/public-posts";
 import type { SeriesContext } from "@/lib/series";
-import { formatDate, siteConfig } from "@/lib/site";
+import { absoluteUrl, formatDate, siteConfig } from "@/lib/site";
 
 /**
  * The post itself — cover, head, prose.
  *
  * Shared by the public post page and the draft preview so a preview shows
  * exactly what will publish, rather than a second rendering that can drift.
+ *
+ * Marked up as an `h-entry` microformat. That is a second, independent way of
+ * saying what the JSON-LD already says — and it is worth having both, because
+ * they are read by different things: JSON-LD by search engines, microformats
+ * by feed readers, IndieWeb tooling and anything that federates a page by
+ * parsing it rather than by asking an API. The classes hang off elements that
+ * exist anyway, so nothing is added to the markup for their sake alone.
  */
 export function Article({
   post,
@@ -24,7 +31,7 @@ export function Article({
   const published = post.published_at ?? post.created_at;
 
   return (
-    <article className="article">
+    <article className="article h-entry">
       {post.cover_image_url && (
         /*
           Contained rather than full-bleed. Design.md §6 left this open
@@ -52,26 +59,49 @@ export function Article({
           </Link>
         )}
 
-        <h1 className="article-title">{post.title}</h1>
+        <h1 className="article-title p-name">{post.title}</h1>
+
+        {post.excerpt && <p className="p-summary" hidden>{post.excerpt}</p>}
 
         <div className="byline">
           <span className="byline-avatar" aria-hidden="true">
             {siteConfig.author.slice(0, 1)}
           </span>
           <span className="byline-text">
-            <span className="byline-name">Written by {siteConfig.author}</span>
+            {/* A nested h-card: the author of this entry, not of the site. */}
+            <span className="byline-name p-author h-card">
+              Written by{" "}
+              <a className="p-name u-url" href={absoluteUrl("/about")} rel="author">
+                {siteConfig.author}
+              </a>
+            </span>
             <span className="byline-meta">
-              <time dateTime={published}>{formatDate(published)}</time>
+              <time className="dt-published" dateTime={published}>
+                {formatDate(published)}
+              </time>
               {" · "}
               {readingMinutes(post.content_html)} min read
             </span>
           </span>
         </div>
 
+        {/*
+          The entry's own permalink, which a parser needs to attribute the
+          content to a URL. Hidden from view — the reader is already on it —
+          but present in the markup, which is what a consumer reads.
+        */}
+        <a className="u-url u-uid" href={absoluteUrl(`/${post.slug}`)} hidden>
+          {post.title}
+        </a>
+
         {post.tags.length > 0 && (
           <div className="article-tags">
             {post.tags.map((tag) => (
-              <Link key={tag.slug} href={`/tag/${tag.slug}`} className="tag-pill">
+              <Link
+                key={tag.slug}
+                href={`/tag/${tag.slug}`}
+                className="tag-pill p-category"
+              >
                 {tag.name}
               </Link>
             ))}
@@ -85,7 +115,7 @@ export function Article({
         this is rendering our own output, not reader input.
       */}
       <div
-        className="prose"
+        className="prose e-content"
         dangerouslySetInnerHTML={{ __html: post.content_html ?? "" }}
       />
 

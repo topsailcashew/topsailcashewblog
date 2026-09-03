@@ -19,7 +19,8 @@
     "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "og:generate": "tsx scripts/generate-og-images.ts",
-    "db:seed-pages": "tsx scripts/seed-pages.ts"
+    "db:seed-pages": "tsx scripts/seed-pages.ts",
+    "titles:clean": "tsx scripts/strip-title-extensions.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

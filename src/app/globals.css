@@ -6,8 +6,24 @@
   /* --- colour ------------------------------------------------------------ */
   --bg: #ffffff;
   --fg: #0a0a0a;
-  --fg-muted: #6b6b6b;
+  /*
+    7.03:1 on white — AAA, where #6b6b6b was 5.33:1. It passed AA, but this
+    grey carries the dates, excerpts and read times, most of it set at 12–14px
+    where the AA floor is thin in practice and the first thing to go on a dim
+    screen. It still reads as clearly secondary to --fg.
+  */
+  --fg-muted: #595959;
   --border: #e5e5e5;
+  /*
+    Form controls only, at 3.45:1.
+
+    --border is a hairline for panel and card edges, and darkening it globally
+    would make the whole page heavier. But WCAG 1.4.11 asks 3:1 for the visual
+    boundary of a *control*, and at #e5e5e5 an input measured 1.26:1 — the
+    comment fields were effectively borderless, so there was nothing to tell a
+    reader where to click.
+  */
+  --field-border: #8a8a8a;
 
   /*
     §2 asks to confirm the hex at implementation time. #FF5A1F is the hot
@@ -257,7 +273,7 @@ input, textarea, select {
   font-size: var(--text-sm);
   color: var(--fg);
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--field-border);
   border-radius: var(--radius);
   padding: 0 var(--s3);
   min-height: var(--control-h);
@@ -555,15 +571,22 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   max-width: 34rem;
 }
 .featured-meta { margin-top: var(--s4); }
+/*
+  Set heavier and a step larger than the meta line above it. At 14px/600 it
+  read as another line of small grey furniture that happened to be orange;
+  the job of this link is to be the one thing on the block you press.
+*/
 .featured-more {
+  display: inline-block;
   margin-top: var(--s4);
   font-family: var(--sans);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--accent-ink);
   text-decoration: none;
 }
-.featured-more:hover { text-decoration: underline; }
+.featured-more:hover { text-decoration: underline; text-underline-offset: 0.25em; }
 
 .categories {
   display: flex;
@@ -787,13 +810,28 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 
 /* --- sidebar ------------------------------------------------------------- */
 
-.article-aside { position: sticky; top: var(--s5); display: flex; flex-direction: column; gap: var(--s6); }
+/*
+  A faint rule and a wider gutter, so "Read Next" reads as beside the article
+  rather than as part of it. At 86px of plain whitespace the eye kept running
+  from the end of a paragraph into the sidebar's links.
+*/
+.article-aside {
+  position: sticky;
+  top: var(--s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  padding-left: var(--s5);
+  border-left: 1px solid var(--border);
+}
 @media (max-width: 62rem) {
   .article-aside {
     position: static;
     max-width: var(--measure);
     margin-inline: auto;
     width: 100%;
+    border-left: 0;
+    padding-left: 0;
     border-top: 1px solid var(--border);
     padding-top: var(--s6);
   }
@@ -1880,3 +1918,23 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 }
 .media-exif { margin-top: calc(var(--s1) * -1); }
 .badge--fediverse { background: color-mix(in srgb, #6364ff 16%, transparent); color: #4b4cd6; }
+
+/* --- search empty state -------------------------------------------------- */
+
+/*
+  A search that finds nothing used to end in a full stop. That is the moment a
+  reader leaves, and on an archive this size "here is what else is here" is a
+  better answer than an apology — so the dead end now carries three pieces and,
+  when it is switched on, the signup form.
+*/
+.search-empty {
+  max-width: var(--measure);
+  margin: var(--s6) 0 var(--s7);
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  color: var(--fg-muted);
+}
+.search-empty strong { color: var(--fg); font-weight: 600; }
+.search-suggest-heading { margin-bottom: var(--s4); }
+/* The form is an offer, not the answer to the search — it follows the reading. */
+.search-empty ~ .subscribe { margin-top: var(--s7); }

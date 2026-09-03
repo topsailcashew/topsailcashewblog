@@ -63,7 +63,16 @@ export async function importDocument(
     }
 
     const parsed = markdownToTiptap(document.content, fileTitle(document.path));
-    const title = parsed.title?.trim() || fileTitle(document.path) || "Untitled";
+    /*
+      Stripped once, at the end, whatever the title came from. `fileTitle`
+      already drops the extension when the filename is the fallback — but a
+      .docx whose own first heading is the filename (which is how Word saves a
+      document nobody gave a title) puts it back, and it then outlives the
+      import on a published page.
+    */
+    const title = stripFileExtension(
+      parsed.title?.trim() || fileTitle(document.path) || "Untitled",
+    );
     const html = renderTiptapHtml(parsed.doc);
 
     if (existing) {
@@ -125,8 +134,19 @@ export async function importDocument(
 const TITLE_EXTENSIONS = /\.(docx|md|markdown|txt)$/i;
 
 function fileTitle(path: string): string {
-  const name = path.split("/").pop() ?? path;
-  return name.replace(TITLE_EXTENSIONS, "").trim();
+  return stripFileExtension(path.split("/").pop() ?? path);
+}
+
+/**
+ * Removes a trailing file extension from a title.
+ *
+ * Exported because it is applied in two places: here, on the way in, and by
+ * scripts/strip-title-extensions.ts, which cleans posts imported before this
+ * rule existed. One definition, so the two cannot disagree about what counts
+ * as an extension.
+ */
+export function stripFileExtension(title: string): string {
+  return title.replace(TITLE_EXTENSIONS, "").trim();
 }
 
 /** How many posts came from an import. Shown on the import screen. */

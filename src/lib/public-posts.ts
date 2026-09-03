@@ -160,6 +160,9 @@ export async function searchPublished(
     .orderBy(desc(rank), desc(posts.publishedAt))
     .limit(SEARCH_LIMIT);
 
+  // Nothing matched the words as spelled. Try again on how they are spelled.
+  if (rows.length === 0) return searchByTrigram(db, trimmed);
+
   const tagsByPost = await getTagsForPosts(
     db,
     rows.map((row) => row.post.id),
@@ -169,6 +172,63 @@ export async function searchPublished(
     ...toSummary(serializePost(row.post, tagsByPost.get(row.post.id) ?? [])),
     rank: Number(row.rank),
   }));
+}
+
+/**
+ * How close a trigram match has to be before it is offered.
+ *
+ * Postgres defaults to 0.3, which at this corpus size returns something for
+ * almost any input — and a wrong answer confidently offered is worse than an
+ * empty state that suggests reading instead. 0.28 on a word-boundary
+ * comparison tolerates a transposition or a missing letter and little more.
+ */
+const TRIGRAM_THRESHOLD = 0.28;
+
+/**
+ * The typo-tolerant fallback.
+ *
+ * Full-text search matches lexemes: "slow software" finds the post and "slwo
+ * software" finds nothing, because the misspelling stems to a word in no
+ * document. Trigram similarity compares three-character windows instead, so a
+ * transposition still scores highly.
+ *
+ * Runs only when full-text found nothing, because when the spelling is right
+ * `ts_rank` is the better ranking by some distance.
+ *
+ * Degrades to an empty result if `pg_trgm` is not installed, so search keeps
+ * working on a database where migration 0010 has not been applied.
+ */
+async function searchByTrigram(
+  db: BlogDatabase,
+  query: string,
+): Promise<SearchResult[]> {
+  try {
+    const similarity = sql<number>`greatest(
+      word_similarity(${query}, ${posts.title}),
+      word_similarity(${query}, coalesce(${posts.excerpt}, ''))
+    )`;
+
+    const rows = await db
+      .select({ post: posts, rank: similarity })
+      .from(posts)
+      .where(and(publishedOnly, sql`${similarity} >= ${TRIGRAM_THRESHOLD}`))
+      .orderBy(desc(similarity), desc(posts.publishedAt))
+      .limit(SEARCH_LIMIT);
+
+    const tagsByPost = await getTagsForPosts(
+      db,
+      rows.map((row) => row.post.id),
+    );
+
+    return rows.map((row) => ({
+      ...toSummary(serializePost(row.post, tagsByPost.get(row.post.id) ?? [])),
+      rank: Number(row.rank),
+    }));
+  } catch {
+    // pg_trgm missing, or the query was something it could not handle. An
+    // empty result is the honest answer and the page has a good empty state.
+    return [];
+  }
 }
 
 /** Published posts in a series, earliest first — the order they were meant to be read. */
@@ -410,11 +470,56 @@ export function readingMinutes(html: string | null): number {
   return Math.max(1, Math.ceil(words / WORDS_PER_MINUTE));
 }
 
+/** How much of the opening to borrow when a post has no excerpt of its own. */
+const DERIVED_EXCERPT_CHARS = 180;
+
+/**
+ * The excerpt, or the opening of the piece when there is none.
+ *
+ * A card whose post has no excerpt is a title floating in an empty cell — the
+ * grid gives every card in a row the same height, so the space below the title
+ * stays blank and the column reads as broken rather than as sparse. Borrowing
+ * the first sentences shows what a reader would have got by clicking anyway.
+ *
+ * Cut at a word boundary and marked with an ellipsis, so it reads as an
+ * opening rather than as a sentence that lost its ending.
+ */
+export function excerptFor(post: {
+  excerpt: string | null;
+  content_html: string | null;
+}): string | null {
+  const own = post.excerpt?.trim();
+  if (own) return own;
+
+  const text = (post.content_html ?? "")
+    // Block boundaries become spaces, or the last word of one paragraph runs
+    // into the first word of the next.
+    .replace(/<\/(p|h[1-6]|li|blockquote|pre|div)>/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (text === "") return null;
+  if (text.length <= DERIVED_EXCERPT_CHARS) return text;
+
+  const cut = text.slice(0, DERIVED_EXCERPT_CHARS);
+  const lastSpace = cut.lastIndexOf(" ");
+  const trimmed = lastSpace > 40 ? cut.slice(0, lastSpace) : cut;
+  return `${trimmed.replace(/[,;:.\s]+$/, "")}…`;
+}
+
 export function toSummary(post: SerializedPost): PostSummary {
   return {
     title: post.title,
     slug: post.slug,
-    excerpt: post.excerpt,
+    excerpt: excerptFor(post),
     coverImageUrl: post.cover_image_url,
     // A published post always has this set; fall back so the type stays honest.
     publishedAt: post.published_at ?? post.created_at,

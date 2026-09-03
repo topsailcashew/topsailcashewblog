@@ -6,7 +6,7 @@ import { JsonLd } from "@/components/public/JsonLd";
 import { getPublishedPage } from "@/lib/pages";
 import { listProminentTags } from "@/lib/public-posts";
 import { pageJsonLd } from "@/lib/structured-data";
-import { siteConfig } from "@/lib/site";
+import { siteConfig, siteUrl } from "@/lib/site";
 
 /**
  * A dedicated route rather than the database-backed `/[slug]` one, because
@@ -43,8 +43,29 @@ export default async function AboutPage() {
   if (!page) notFound();
 
   return (
-    <div className="shell-wrap about">
+    /*
+      An `h-card` — the microformat for a person.
+
+      The JSON-LD elsewhere already says who wrote this site, but the two are
+      read by different things: JSON-LD by search engines, h-card by feed
+      readers, IndieWeb tooling and anything that parses a page rather than
+      querying an API. Both point at the same values, so neither can be the
+      one that goes stale.
+
+      The visible heading is a greeting, not a name — "Nate!" is the nickname
+      and the legal-ish name is carried alongside it, because a parser asked
+      for the author of this site should get the name the posts are bylined
+      with, not the word in the poster.
+    */
+    <div className="shell-wrap about h-card">
       <JsonLd json={pageJsonLd(page)} />
+
+      <span className="p-name" hidden>
+        {siteConfig.author}
+      </span>
+      <a className="u-url" href={siteUrl() || "/"} hidden rel="me">
+        {siteConfig.name}
+      </a>
 
       <header className={page.cover_image_url ? "about-hero" : "about-hero about-hero--bare"}>
         {/*
@@ -54,13 +75,13 @@ export default async function AboutPage() {
         */}
         <h1 className="about-statement">
           <span className="about-line">Hi, I&rsquo;m</span>
-          <span className="about-line about-line--outline">Nate!</span>
+          <span className="about-line about-line--outline p-nickname">Nate!</span>
         </h1>
 
         {page.cover_image_url && (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
-            className="about-portrait"
+            className="about-portrait u-photo"
             src={page.cover_image_url}
             alt={siteConfig.author}
             fetchPriority="high"
@@ -74,7 +95,7 @@ export default async function AboutPage() {
           <Link href="/articles" className="btn btn--primary">
             Read the articles
           </Link>
-          <a href={`mailto:${siteConfig.contactEmail}`} className="btn">
+          <a href={`mailto:${siteConfig.contactEmail}`} className="btn u-email">
             Get in touch
           </a>
         </div>
@@ -84,7 +105,7 @@ export default async function AboutPage() {
             <span className="label">Writes about</span>
             <div className="about-topic-list">
               {tags.map((tag) => (
-                <Link key={tag.slug} href={`/tag/${tag.slug}`}>
+                <Link key={tag.slug} href={`/tag/${tag.slug}`} className="p-category">
                   {tag.name}
                 </Link>
               ))}
@@ -95,7 +116,7 @@ export default async function AboutPage() {
 
       {page.content_html && (
         <div
-          className="prose about-prose"
+          className="prose about-prose p-note"
           dangerouslySetInnerHTML={{ __html: page.content_html }}
         />
       )}
