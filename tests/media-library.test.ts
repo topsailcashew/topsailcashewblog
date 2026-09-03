@@ -6,7 +6,7 @@ import {
   findMediaUsage,
   getMediaById,
   listMedia,
-  setMediaAltText,
+  updateMedia,
   uploadMedia,
 } from "@/lib/media";
 import { createPage, updatePage } from "@/lib/pages";
@@ -85,8 +85,8 @@ describe(
       const { bucket } = fakeBucket();
       const item = await upload(bucket, "x.png", "Original");
 
-      assert.equal((await setMediaAltText(db(), item.id, "Better")).alt_text, "Better");
-      assert.equal((await setMediaAltText(db(), item.id, "   ")).alt_text, null);
+      assert.equal((await updateMedia(db(), item.id, { altText: "Better" })).alt_text, "Better");
+      assert.equal((await updateMedia(db(), item.id, { altText: "   " })).alt_text, null);
     });
 
     describe("usage", () => {

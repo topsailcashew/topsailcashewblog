@@ -2,7 +2,9 @@ import { asc, eq } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
 import { pages, type PageRow, type PostStatus } from "@/db/schema";
 import { notFound } from "./http";
+import { rewriteInternalLinks } from "./internal-links";
 import { recordSlugChange } from "./redirects";
+import { siteUrl } from "./site";
 import { slugify, withUniqueSlug } from "./slug";
 import type { CreatePageInput, UpdatePageInput } from "./validation";
 
@@ -141,8 +143,13 @@ export async function updatePage(
         ? await applyPatch(db, id, patch)
         : existing;
 
+  // Same two halves as a post rename: the redirect for the outside world,
+  // the rewrite for this site's own links. See src/lib/internal-links.ts.
   if (row.slug !== existing.slug) {
     await recordSlugChange(db, `/${existing.slug}`, `/${row.slug}`);
+    await rewriteInternalLinks(db, `/${existing.slug}`, `/${row.slug}`, {
+      siteUrl: siteUrl(),
+    });
   }
 
   return { page: serializePage(row), previousSlug: existing.slug };

@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getDb } from "@/db/client";
+import { announceIfPublished } from "@/lib/activitypub/announce";
+import { getSessionSecret } from "@/lib/auth";
 import { handle, json, notFound, readJsonBody } from "@/lib/http";
 import { getPostById, purgePost, trashPost, updatePost } from "@/lib/posts";
 import { affectsPublicOutput, revalidatePublicPages } from "@/lib/revalidate";
@@ -41,6 +43,9 @@ export const PATCH = handle(async (request: NextRequest, context: RouteContext) 
       // Both, so moving a post out of a series refreshes the page it left.
       seriesIds: [post.series_id, previous.seriesId],
     });
+
+    // Once per post, and only when it is genuinely live — see announceIfPublished.
+    await announceIfPublished(db, post, getSessionSecret());
   }
   return json({ post });
 });

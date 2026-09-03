@@ -4,9 +4,15 @@ import { EditorContent, useEditor, type JSONContent } from "@tiptap/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
-import { EMPTY_DOC, buildExtensions } from "@/components/editor/extensions";
+import {
+  EMPTY_DOC,
+  INSERT_IMAGE_EVENT,
+  buildExtensions,
+} from "@/components/editor/extensions";
 import type { SerializedPage } from "@/lib/pages";
-import { isImageFile, uploadImage } from "@/lib/upload-client";
+import { isImageFile } from "@/lib/upload-client";
+import { useImageInsertion } from "@/lib/use-image-insertion";
+import { ImageDetailsDialog } from "./ImageDetailsDialog";
 import { useAutosave } from "@/lib/use-autosave";
 import { CoverImagePicker } from "./CoverImagePicker";
 import { SaveStatus } from "./SaveStatus";
@@ -41,10 +47,11 @@ export function PageEditor({ initialPage }: { initialPage: SerializedPage | null
   const [pageId, setPageId] = useState<string | null>(initialPage?.id ?? null);
   const [status, setStatus] = useState(initialPage?.status ?? "draft");
   const [draft, setDraft] = useState<Draft>(() => draftFromPage(initialPage));
-  const [uploading, setUploading] = useState(false);
+
   const [actionError, setActionError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
   const pageIdRef = useRef(pageId);
 
@@ -56,28 +63,13 @@ export function PageEditor({ initialPage }: { initialPage: SerializedPage | null
     setDraft((current) => ({ ...current, [key]: value }));
   }, []);
 
-  const insertImages = useCallback(async (files: File[]) => {
-    const editor = editorRef.current;
-    const images = files.filter(isImageFile);
-    if (!editor || images.length === 0) return;
-
-    setUploading(true);
-    setActionError(null);
-    try {
-      for (const file of images) {
-        const media = await uploadImage(file);
-        editor
-          .chain()
-          .focus()
-          .setImage({ src: media.url, alt: media.alt_text ?? file.name })
-          .run();
-      }
-    } catch (cause) {
-      setActionError(cause instanceof Error ? cause.message : "Image upload failed");
-    } finally {
-      setUploading(false);
-    }
-  }, []);
+  const {
+    uploading,
+    insertImages,
+    pending: pendingImage,
+    confirm: confirmImage,
+    cancel: cancelImage,
+  } = useImageInsertion(editorRef, setActionError);
 
   const editor = useEditor({
     extensions: useMemo(() => buildExtensions(), []),
@@ -100,6 +92,20 @@ export function PageEditor({ initialPage }: { initialPage: SerializedPage | null
 
   useEffect(() => {
     editorRef.current = editor;
+  }, [editor]);
+
+  /*
+    ⌘⌥I opens the file picker. The shortcut lives in the ProseMirror schema
+    (see buildExtensions) and announces itself as a DOM event, which is picked
+    up here — so the schema stays free of anything about this component, and
+    the handler is always the current one rather than the first render's.
+  */
+  useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
+    const open = () => fileInputRef.current?.click();
+    dom.addEventListener(INSERT_IMAGE_EVENT, open);
+    return () => dom.removeEventListener(INSERT_IMAGE_EVENT, open);
   }, [editor]);
 
   const hasSubstance =
@@ -259,6 +265,12 @@ export function PageEditor({ initialPage }: { initialPage: SerializedPage | null
           void insertImages(Array.from(event.target.files ?? []));
           event.target.value = "";
         }}
+      />
+
+      <ImageDetailsDialog
+        media={pendingImage}
+        onCancel={cancelImage}
+        onConfirm={(details) => void confirmImage(details)}
       />
 
       <section className="sidebar">

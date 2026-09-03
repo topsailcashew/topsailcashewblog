@@ -25,6 +25,13 @@ export async function proxy(request: NextRequest) {
   return NextResponse.redirect(loginUrl);
 }
 
+/*
+  Must stay in step with PROTECTED_API_PREFIXES in src/lib/auth.ts — a prefix
+  that is gated there but missing here never reaches the proxy at all, so it is
+  simply open, with nothing to notice. Next requires this to be a static
+  literal, so it cannot be derived from that list; tests/auth.test.ts asserts
+  the two agree instead.
+*/
 export const config = {
   matcher: [
     "/admin/:path*",
@@ -35,5 +42,8 @@ export const config = {
     "/api/media/:path*",
     "/api/comments/:path*",
     "/api/series/:path*",
+    "/api/subscribers/:path*",
+    "/api/settings/:path*",
+    "/api/newsletter/:path*",
   ],
 };

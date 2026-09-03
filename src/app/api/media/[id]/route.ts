@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { z } from "zod";
 import { getDb } from "@/db/client";
 import { handle, json, notFound, readJsonBody } from "@/lib/http";
 import {
@@ -7,18 +6,14 @@ import {
   findMediaUsage,
   getMediaById,
   serializeMedia,
-  setMediaAltText,
+  updateMedia,
 } from "@/lib/media";
 import { getMediaBucket } from "@/lib/r2";
-import { uuidSchema } from "@/lib/validation";
+import { updateMediaSchema, uuidSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ id: string }> };
-
-const patchSchema = z.object({
-  alt_text: z.string().max(500).nullable(),
-});
 
 async function mediaId(context: RouteContext): Promise<string> {
   const { id } = await context.params;
@@ -39,11 +34,17 @@ export const GET = handle(async (_request: NextRequest, context: RouteContext) =
   });
 });
 
-/** PATCH /api/media/:id — alt text is the only editable field. */
+/** PATCH /api/media/:id — how the image should be described, and as what. */
 export const PATCH = handle(async (request: NextRequest, context: RouteContext) => {
   const id = await mediaId(context);
-  const { alt_text } = patchSchema.parse(await readJsonBody(request));
-  return json({ media: await setMediaAltText(getDb(), id, alt_text) });
+  const body = updateMediaSchema.parse(await readJsonBody(request));
+  return json({
+    media: await updateMedia(getDb(), id, {
+      altText: body.alt_text,
+      role: body.role,
+      longDescription: body.long_description,
+    }),
+  });
 });
 
 /**

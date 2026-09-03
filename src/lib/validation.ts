@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { COMMENT_STATUSES, POST_STATUSES } from "@/db/schema";
+import {
+  COMMENT_STATUSES,
+  MEDIA_ROLES,
+  POST_STATUSES,
+  SUBSCRIBER_STATUSES,
+} from "@/db/schema";
+import { SMTP_SECURITY } from "./email/config";
 import { isValidSlug, RESERVED_SLUGS } from "./slug";
 
 /**
@@ -203,3 +209,129 @@ export function parseListQuery(url: URL): ListPostsQuery {
   }
   return listPostsQuerySchema.parse(raw);
 }
+
+/* --- audience ------------------------------------------------------------ */
+
+/**
+ * A public signup.
+ *
+ * Attribution fields are accepted from the client because that is the only
+ * place they exist — UTM parameters live in the URL the browser is looking at,
+ * and `document.referrer` is not sent as a header on a same-origin fetch. They
+ * are therefore untrusted: capped in length, stored as plain text, and never
+ * interpolated anywhere they could be executed. The worst a forged value can
+ * do is put a wrong label in one row of a report.
+ */
+const attribution = z.string().trim().max(200).nullable().optional();
+
+export const subscribeSchema = z.object({
+  email: z.email("That does not look like an email address").max(320),
+  name: z.string().trim().max(120).nullable().optional(),
+  utm_source: attribution,
+  utm_medium: attribution,
+  utm_campaign: attribution,
+  utm_term: attribution,
+  utm_content: attribution,
+  referrer: z.string().trim().max(500).nullable().optional(),
+  landing_path: z.string().trim().max(500).nullable().optional(),
+  /* Same honeypot rule as comments: accepted, then silently discarded. */
+  [HONEYPOT_FIELD]: z.string().max(200).optional(),
+});
+
+export const listSubscribersQuerySchema = z.object({
+  status: z.enum(SUBSCRIBER_STATUSES).optional(),
+  q: z.string().trim().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+/* --- settings ------------------------------------------------------------ */
+
+export const smtpSettingsSchema = z.object({
+  host: z.string().trim().max(255),
+  port: z.coerce.number().int().min(1).max(65535),
+  security: z.enum(SMTP_SECURITY),
+  username: z.string().trim().max(255),
+  /**
+   * Absent means "leave the stored one alone"; null means "clear it".
+   * An empty string is treated as absent, because that is what an untouched
+   * password field posts.
+   */
+  password: z.string().max(500).nullable().optional(),
+  from_name: z.string().trim().max(120),
+  from_email: z.union([z.email().max(320), z.literal("")]),
+  reply_to: z.union([z.email().max(320), z.literal(""), z.null()]).optional(),
+});
+
+export const newsletterSettingsSchema = z.object({
+  enabled: z.boolean(),
+  pitch: z.string().trim().max(400),
+  footer: z.string().trim().max(600),
+  double_opt_in: z.boolean(),
+});
+
+export const sendTestSchema = z.object({
+  to: z.email("Where should the test go?").max(320),
+});
+
+/**
+ * What a publish does about email.
+ *
+ * "email" without "publish" is a send to the list that never appears on the
+ * site — which is why the email body drops its "read it on the site" link in
+ * that case; there would be nothing at the other end of it.
+ */
+export const PUBLISH_MODES = ["publish", "publish_and_email", "email"] as const;
+export type PublishMode = (typeof PUBLISH_MODES)[number];
+
+export const sendNewsletterSchema = z.object({
+  mode: z.enum(PUBLISH_MODES).default("publish_and_email"),
+  /** Recipients per call. The client loops until nothing remains. */
+  batch_size: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+/* --- media --------------------------------------------------------------- */
+
+export const updateMediaSchema = z
+  .object({
+    alt_text: z.string().max(500).nullable().optional(),
+    role: z.enum(MEDIA_ROLES).optional(),
+    long_description: z.string().max(4000).nullable().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, "Provide a field to update");
+
+/**
+ * Image metadata measured in the browser at upload time.
+ *
+ * Untrusted, like everything else from a client, and bounded accordingly: the
+ * placeholder is capped so it cannot be used to smuggle a large payload into
+ * a column that gets inlined into every page that renders the image.
+ */
+export const imageMetadataSchema = z.object({
+  width: z.coerce.number().int().min(1).max(100000).optional(),
+  height: z.coerce.number().int().min(1).max(100000).optional(),
+  blurhash: z.string().max(200).optional(),
+  lqip: z
+    .string()
+    .max(4000)
+    .refine((value) => value.startsWith("data:image/"), "LQIP must be an image data URI")
+    .optional(),
+});
+
+/* --- federation ---------------------------------------------------------- */
+
+export const fediverseSettingsSchema = z.object({
+  enabled: z.boolean(),
+  /**
+   * The local part of the handle. Constrained to what the fediverse actually
+   * accepts in an `acct:` — letters, digits, underscore and hyphen — because
+   * anything else produces a handle no client can resolve.
+   */
+  username: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60)
+    .regex(/^[a-zA-Z0-9_-]+$/, "Letters, digits, underscore and hyphen only"),
+  summary: z.string().trim().max(500),
+});

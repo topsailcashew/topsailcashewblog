@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getDb } from "@/db/client";
 import { Article } from "@/components/public/Article";
 import { CommentThread } from "@/components/public/CommentThread";
+import { SubscribeSection } from "@/components/public/SubscribeSection";
 import { JsonLd } from "@/components/public/JsonLd";
 import { getApprovedThread } from "@/lib/comments";
 import { getPublishedPage, listPublishedPageSlugs } from "@/lib/pages";
@@ -15,7 +16,11 @@ import {
 } from "@/lib/public-posts";
 import { getSeriesContext } from "@/lib/series";
 import { absoluteUrl, formatDate, siteConfig } from "@/lib/site";
-import { articleJsonLd, pageJsonLd } from "@/lib/structured-data";
+import {
+  articleJsonLd,
+  breadcrumbJsonLd,
+  pageJsonLd,
+} from "@/lib/structured-data";
 
 /*
   Five minutes, matching the list pages.
@@ -133,9 +138,22 @@ export default async function PostPage({ params }: { params: Params }) {
 
   return (
     <div className="article-layout shell-wrap" id="content">
-      <JsonLd json={articleJsonLd(post)} />
+      <JsonLd json={articleJsonLd(post, { commentCount: comments.length })} />
+      <JsonLd
+        json={breadcrumbJsonLd([
+          { name: siteConfig.name, path: "/" },
+          { name: "Articles", path: "/articles" },
+          { name: post.title, path: `/${post.slug}` },
+        ])}
+      />
 
       <Article post={post} seriesContext={seriesContext}>
+        {/*
+          After the piece, before the comments. Someone who has just finished
+          reading is the only person for whom "more of this" is a real offer —
+          which is also why there is nothing at the top of the page.
+        */}
+        <SubscribeSection />
         <CommentThread postId={post.id} comments={comments} />
       </Article>
 
@@ -198,6 +216,12 @@ async function renderPage(db: ReturnType<typeof getDb>, slug: string) {
   return (
     <div className="page-layout shell-wrap" id="content">
       <JsonLd json={pageJsonLd(page)} />
+      <JsonLd
+        json={breadcrumbJsonLd([
+          { name: siteConfig.name, path: "/" },
+          { name: page.title, path: `/${page.slug}` },
+        ])}
+      />
       <article className="article article--page">
         <header className="article-head">
           <h1 className="article-title">{page.title}</h1>

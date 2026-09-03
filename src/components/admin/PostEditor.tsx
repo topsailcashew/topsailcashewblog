@@ -4,14 +4,21 @@ import { EditorContent, useEditor, type JSONContent } from "@tiptap/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
-import { EMPTY_DOC, buildExtensions } from "@/components/editor/extensions";
+import {
+  EMPTY_DOC,
+  INSERT_IMAGE_EVENT,
+  buildExtensions,
+} from "@/components/editor/extensions";
 import type { SerializedPost } from "@/lib/posts";
 import type { SerializedSeries } from "@/lib/series";
 import { useAutosave } from "@/lib/use-autosave";
 import { useIsFuture } from "@/lib/use-is-future";
-import { isImageFile, uploadImage } from "@/lib/upload-client";
+import { isImageFile } from "@/lib/upload-client";
+import { useImageInsertion } from "@/lib/use-image-insertion";
 import { CoverImagePicker } from "./CoverImagePicker";
 import { EditorSection } from "./EditorSection";
+import { ImageDetailsDialog } from "./ImageDetailsDialog";
+import { NewsletterPanel } from "./NewsletterPanel";
 import { PreviewButton } from "./PreviewButton";
 import { PublishPanel } from "./PublishPanel";
 import { RevisionPanel } from "./RevisionPanel";
@@ -67,10 +74,10 @@ export function PostEditor({
   const [status, setStatus] = useState(initialPost?.status ?? "draft");
   const [publishedAt, setPublishedAt] = useState(initialPost?.published_at ?? null);
   const [draft, setDraft] = useState<Draft>(() => draftFromPost(initialPost));
-  const [uploading, setUploading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Read inside save() so the HTML is generated from the live document.
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
   const postIdRef = useRef(postId);
@@ -83,28 +90,13 @@ export function PostEditor({
     setDraft((current) => ({ ...current, [key]: value }));
   }, []);
 
-  const insertImages = useCallback(async (files: File[]) => {
-    const editor = editorRef.current;
-    const images = files.filter(isImageFile);
-    if (!editor || images.length === 0) return;
-
-    setUploading(true);
-    setActionError(null);
-    try {
-      for (const file of images) {
-        const media = await uploadImage(file);
-        editor
-          .chain()
-          .focus()
-          .setImage({ src: media.url, alt: media.alt_text ?? file.name })
-          .run();
-      }
-    } catch (cause) {
-      setActionError(cause instanceof Error ? cause.message : "Image upload failed");
-    } finally {
-      setUploading(false);
-    }
-  }, []);
+  const {
+    uploading,
+    insertImages,
+    pending: pendingImage,
+    confirm: confirmImage,
+    cancel: cancelImage,
+  } = useImageInsertion(editorRef, setActionError);
 
   const editor = useEditor({
     extensions: useMemo(() => buildExtensions(), []),
@@ -137,6 +129,20 @@ export function PostEditor({
 
   useEffect(() => {
     editorRef.current = editor;
+  }, [editor]);
+
+  /*
+    ⌘⌥I opens the file picker. The shortcut lives in the ProseMirror schema
+    (see buildExtensions) and announces itself as a DOM event, which is picked
+    up here — so the schema stays free of anything about this component, and
+    the handler is always the current one rather than the first render's.
+  */
+  useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
+    const open = () => fileInputRef.current?.click();
+    dom.addEventListener(INSERT_IMAGE_EVENT, open);
+    return () => dom.removeEventListener(INSERT_IMAGE_EVENT, open);
   }, [editor]);
 
   /*
@@ -427,6 +433,12 @@ export function PostEditor({
         }}
       />
 
+      <ImageDetailsDialog
+        media={pendingImage}
+        onCancel={cancelImage}
+        onConfirm={(details) => void confirmImage(details)}
+      />
+
         </div>
 
         <aside className="editor-sidebar" aria-label="Post settings">
@@ -443,6 +455,17 @@ export function PostEditor({
               }}
             />
           </EditorSection>
+
+          {/* Owns its own collapsible section, so it can load on expand. */}
+          <NewsletterPanel
+            postId={postId}
+            status={status}
+            onPublished={() => {
+              // A send publishes the post server-side; the bar has to catch up.
+              setStatus("published");
+              router.refresh();
+            }}
+          />
 
           <EditorSection
             title="Details"

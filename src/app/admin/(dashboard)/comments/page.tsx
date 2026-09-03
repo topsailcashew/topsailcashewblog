@@ -87,11 +87,28 @@ export default async function CommentsPage({
           <li key={comment.id}>
             <div className="post-row-head">
               <span className="mini-name">{comment.author_name}</span>
+              {/*
+                A federated reply is moderated in the same queue as one typed
+                into the page — that is the point of accepting them — but the
+                moderator has to be able to tell them apart. A remote handle is
+                an identity nobody here verified, and there is no address to
+                reply to.
+              */}
+              {comment.source === "fediverse" && (
+                <span className="badge badge--fediverse">fediverse</span>
+              )}
               <span className={`status--${comment.status === "approved" ? "published" : "draft"}`}>{comment.status}</span>
             </div>
             <p className="meta">
               {/* Shown to the moderator only — never rendered publicly. */}
-              {comment.author_email} · {formatDate(comment.created_at)}
+              {comment.source === "fediverse" ? (
+                <a href={comment.remote_actor_uri ?? "#"} rel="noopener noreferrer nofollow">
+                  {comment.remote_actor_uri}
+                </a>
+              ) : (
+                comment.author_email
+              )}{" · "}
+              {formatDate(comment.created_at)}
               {comment.parent_id && " · reply"}
               {comment.is_author && " · your reply"}
               {comment.post && (

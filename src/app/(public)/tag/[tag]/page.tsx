@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
+import { JsonLd } from "@/components/public/JsonLd";
 import { PostGrid } from "@/components/public/PostGrid";
 import { getFeed, getTagName, listPublishedTagSlugs } from "@/lib/public-posts";
+import { postListJsonLd } from "@/lib/structured-data";
 
 /* Five-minute window so scheduled posts surface promptly — see app/(public)/page.tsx. */
 export const revalidate = 300;
@@ -48,6 +50,13 @@ export default async function TagPage({ params }: { params: Params }) {
   return (
     // Same 3-column grid as the homepage (§7).
     <div className="shell-wrap" id="content">
+      <JsonLd
+        json={postListJsonLd(feed.posts, {
+          name: `Tagged ${name}`,
+          path: `/tag/${tag}`,
+          description: `Everything tagged ${name}.`,
+        })}
+      />
       <div className="page-head">
         <p className="label">Tagged</p>
         <h1>{name}</h1>

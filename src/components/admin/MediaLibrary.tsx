@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { MediaRole } from "@/db/schema";
 import type { UploadedMedia } from "@/lib/media";
-import { isImageFile, uploadImage } from "@/lib/upload-client";
+import { altTextFor, isImageFile, uploadImage } from "@/lib/upload-client";
 
 type Usage = { kind: "post" | "page"; id: string; title: string };
 
@@ -56,21 +57,24 @@ export function MediaLibrary() {
     setUsage(body.usage);
   }, []);
 
-  const saveAlt = useCallback(
-    async (item: UploadedMedia, altText: string) => {
+  const saveDetails = useCallback(
+    async (
+      item: UploadedMedia,
+      patch: { alt_text?: string | null; role?: MediaRole; long_description?: string | null },
+    ) => {
       setBusy(true);
       try {
         const response = await fetch(`/api/media/${item.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ alt_text: altText || null }),
+          body: JSON.stringify(patch),
         });
         if (!response.ok) throw new Error(`Could not save (${response.status})`);
         const { media } = (await response.json()) as { media: UploadedMedia };
         setSelected(media);
         setItems((current) => current.map((m) => (m.id === media.id ? media : m)));
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Could not save alt text");
+        setError(cause instanceof Error ? cause.message : "Could not save");
       } finally {
         setBusy(false);
       }
@@ -192,11 +196,34 @@ export function MediaLibrary() {
               onClick={() => void open(item)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={item.url} alt={item.alt_text ?? ""} loading="lazy" />
+              <img
+                src={item.url}
+                alt={altTextFor(item)}
+                loading="lazy"
+                width={item.width ?? undefined}
+                height={item.height ?? undefined}
+                // The blur stands in until the full image paints, and holds
+                // the tile's shape so the grid does not jump.
+                style={
+                  item.lqip
+                    ? { backgroundImage: `url(${item.lqip})`, backgroundSize: "cover" }
+                    : undefined
+                }
+              />
               <span className="media-tile-name">{item.filename ?? item.r2_key}</span>
-              {!item.alt_text && (
+              {/*
+                Only informative and functional images need text. Flagging a
+                decorative one for having none would train the eye to ignore
+                the warning that matters.
+              */}
+              {!item.alt_text && item.role !== "decorative" && (
                 <span className="media-tile-warn" title="No alt text">
                   no alt
+                </span>
+              )}
+              {item.role === "decorative" && (
+                <span className="media-tile-role" title="Decorative — screen readers skip it">
+                  decorative
                 </span>
               )}
             </button>
@@ -214,7 +241,7 @@ export function MediaLibrary() {
             setUsage(null);
             setError(null);
           }}
-          onSaveAlt={(alt) => void saveAlt(selected, alt)}
+          onSave={(patch) => void saveDetails(selected, patch)}
           onDelete={(force) => void remove(selected, force)}
         />
       )}
@@ -227,17 +254,22 @@ function MediaDetail({
   usage,
   busy,
   onClose,
-  onSaveAlt,
+  onSave,
   onDelete,
 }: {
   item: UploadedMedia;
   usage: Usage[] | null;
   busy: boolean;
   onClose: () => void;
-  onSaveAlt: (altText: string) => void;
+  onSave: (patch: {
+    alt_text?: string | null;
+    role?: MediaRole;
+    long_description?: string | null;
+  }) => void;
   onDelete: (force: boolean) => void;
 }) {
   const [alt, setAlt] = useState(item.alt_text ?? "");
+  const [longDescription, setLongDescription] = useState(item.long_description ?? "");
   const inUse = usage !== null && usage.length > 0;
 
   return (
@@ -251,23 +283,63 @@ function MediaDetail({
       </div>
 
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="media-detail-image" src={item.url} alt={item.alt_text ?? ""} />
+      <img className="media-detail-image" src={item.url} alt={altTextFor(item)} />
 
       <p className="meta">
-        {item.content_type ?? "image"} · {formatBytes(item.size_bytes)} ·{" "}
+        {item.content_type ?? "image"} · {formatBytes(item.size_bytes)}
+        {item.width && item.height ? ` · ${item.width}×${item.height}` : ""} ·{" "}
         {new Date(item.created_at).toLocaleDateString()}
       </p>
 
+      {item.exif && <ExifSummary exif={item.exif} />}
+
       <label>
-        Alt text
-        <textarea
-          rows={2}
-          value={alt}
-          placeholder="Describe the image for screen readers"
-          onChange={(event) => setAlt(event.target.value)}
-          onBlur={() => onSaveAlt(alt)}
-        />
+        Role
+        <select
+          value={item.role}
+          onChange={(event) => onSave({ role: event.target.value as MediaRole })}
+        >
+          <option value="informative">Informative — carries meaning</option>
+          <option value="decorative">Decorative — screen readers skip it</option>
+          <option value="functional">Functional — acts as a link or button</option>
+          <option value="complex">Complex — needs a longer account</option>
+        </select>
       </label>
+
+      {item.role === "decorative" ? (
+        <p className="hint">
+          Rendered with <code>alt=&quot;&quot;</code>. Change the role above to
+          give it text.
+        </p>
+      ) : (
+        <label>
+          {item.role === "functional" ? "What does it do?" : "Alt text"}
+          <textarea
+            rows={2}
+            value={alt}
+            placeholder={
+              item.role === "functional"
+                ? "The action, not the picture"
+                : "What a reader who cannot see it would need to know"
+            }
+            onChange={(event) => setAlt(event.target.value)}
+            onBlur={() => onSave({ alt_text: alt || null })}
+          />
+        </label>
+      )}
+
+      {item.role === "complex" && (
+        <label>
+          Long description
+          <textarea
+            rows={4}
+            value={longDescription}
+            placeholder="The figures, the trend, the thing the chart is evidence for."
+            onChange={(event) => setLongDescription(event.target.value)}
+            onBlur={() => onSave({ long_description: longDescription || null })}
+          />
+        </label>
+      )}
 
       <label>
         URL
@@ -310,6 +382,29 @@ function MediaDetail({
       </button>
     </aside>
   );
+}
+
+/**
+ * The camera fields, when there are any.
+ *
+ * Read from the file at upload and shown here rather than anywhere public:
+ * it is useful for finding "the one shot on the 35mm", and it is nobody's
+ * business what camera the author owns. GPS is never extracted at all — see
+ * src/lib/image-metadata.ts.
+ */
+function ExifSummary({ exif }: { exif: NonNullable<UploadedMedia["exif"]> }) {
+  const parts = [
+    [exif.make, exif.model].filter(Boolean).join(" "),
+    exif.lens,
+    exif.focal_length,
+    exif.aperture,
+    exif.exposure,
+    exif.iso ? `ISO ${exif.iso}` : null,
+    exif.taken_at ? new Date(exif.taken_at).toLocaleDateString() : null,
+  ].filter((part): part is string => Boolean(part));
+
+  if (parts.length === 0) return null;
+  return <p className="meta media-exif">{parts.join(" · ")}</p>;
 }
 
 function formatBytes(bytes: number | null): string {

@@ -9,6 +9,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -96,6 +97,16 @@ export const posts = pgTable(
      */
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
 
+    /**
+     * When this post was broadcast to the fediverse.
+     *
+     * Set once. Federation has no edit semantics worth relying on — an Update
+     * activity is honoured by some instances and ignored by others — so a
+     * republish must not re-announce a post that followers already have in
+     * their timeline.
+     */
+    federatedAt: timestamp("federated_at", { withTimezone: true }),
+
     /*
       Provenance for posts that arrived from an import rather than the editor.
 
@@ -160,6 +171,18 @@ export const postTags = pgTable(
 );
 
 /**
+ * How an image functions on the page, which is what its alt text has to
+ * follow. WCAG's decision tree, as four values.
+ */
+export const MEDIA_ROLES = [
+  "informative",
+  "decorative",
+  "functional",
+  "complex",
+] as const;
+export type MediaRole = (typeof MEDIA_ROLES)[number];
+
+/**
  * Media rows are written by the R2 upload flow. `r2Key` is the object key
  * inside the bucket; `url` is the public (or signed) URL we serve.
  *
@@ -180,11 +203,50 @@ export const media = pgTable(
     filename: text("filename"),
     contentType: text("content_type"),
     sizeBytes: integer("size_bytes"),
+
+    /**
+     * What the image is *for*, which is what decides its alt text.
+     *
+     * Alt text is not a description field, it is a function of the image's
+     * role, and the roles have genuinely different rules:
+     *   informative — describe the content
+     *   decorative  — emit alt="" so a screen reader skips it entirely
+     *   functional  — describe the *action*, not the picture (a link or button)
+     *   complex     — a short alt plus a long description elsewhere on the page
+     *
+     * Storing the role rather than only the text is what lets the renderer get
+     * `alt=""` right. An empty alt and a missing alt look identical in a
+     * database column and mean opposite things to a screen reader.
+     */
+    role: text("role").notNull().default("informative").$type<MediaRole>(),
+    /** The prose for a `complex` image — a chart's actual numbers, say. */
+    longDescription: text("long_description"),
+
+    /*
+      Intrinsic metadata, extracted at upload. Dimensions come from the file
+      header on the server; the placeholder needs a real pixel decode and is
+      produced in the browser. See src/lib/image-metadata.ts.
+    */
+    width: integer("width"),
+    height: integer("height"),
+    /** A ~30-byte BlurHash, or null when the browser could not decode. */
+    blurhash: text("blurhash"),
+    /** Tiny base64 WebP/JPEG data URI, inlined as a background while loading. */
+    lqip: text("lqip"),
+    /** Camera, lens, capture time, orientation. GPS is stripped — see extractExif. */
+    exif: jsonb("exif"),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("media_created_at_idx").on(table.createdAt.desc())],
+  (table) => [
+    index("media_created_at_idx").on(table.createdAt.desc()),
+    check(
+      "media_role_check",
+      sql`${table.role} in ('informative', 'decorative', 'functional', 'complex')`,
+    ),
+  ],
 );
 
 /**
@@ -266,6 +328,10 @@ export const pages = pgTable("pages", {
     .$onUpdate(() => new Date()),
 });
 
+/** Where a comment came in from. */
+export const COMMENT_SOURCES = ["web", "fediverse"] as const;
+export type CommentSource = (typeof COMMENT_SOURCES)[number];
+
 export const COMMENT_STATUSES = [
   "pending",
   "approved",
@@ -293,8 +359,19 @@ export const comments = pgTable(
       onDelete: "cascade",
     }),
     authorName: text("author_name").notNull(),
-    /** Collected for moderation contact. Never rendered on a public page. */
-    authorEmail: text("author_email").notNull(),
+    /**
+     * Collected for moderation contact. Never rendered on a public page.
+     *
+     * Nullable only because a federated reply has no email to collect — the
+     * check constraint below still requires one for every web submission.
+     */
+    authorEmail: text("author_email"),
+    /** "web" for the on-page form, "fediverse" for a federated reply. */
+    source: text("source").notNull().default("web").$type<CommentSource>(),
+    /** The remote account that wrote it, e.g. https://example.social/users/bob. */
+    remoteActorUri: text("remote_actor_uri"),
+    /** The remote object's id. Unique, so a redelivered activity is not a second comment. */
+    remoteObjectUri: text("remote_object_uri").unique(),
     body: text("body").notNull(),
     status: text("status").notNull().default("pending").$type<CommentStatus>(),
     /** True for replies written from the admin queue, badged as the author. */
@@ -317,7 +394,297 @@ export const comments = pgTable(
       "comments_status_check",
       sql`${table.status} in ('pending', 'approved', 'rejected', 'spam')`,
     ),
+    check(
+      "comments_source_check",
+      sql`${table.source} in ('web', 'fediverse')`,
+    ),
+    // A web comment must carry an email; a federated one must carry an actor.
+    // Without this, dropping NOT NULL above would silently permit an anonymous
+    // web submission with no way to reply to it.
+    check(
+      "comments_identity_check",
+      sql`(${table.source} = 'web' and ${table.authorEmail} is not null)
+          or (${table.source} = 'fediverse' and ${table.remoteActorUri} is not null)`,
+    ),
   ],
+);
+
+/* ------------------------------------------------------------------------ *
+ * Audience
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Where a subscriber is in their lifecycle.
+ *
+ * `pending` is the state a signup lands in before the confirmation link is
+ * clicked. Nothing is ever emailed to a pending address except that one
+ * confirmation — double opt-in is not a nicety here, it is what keeps a
+ * self-hosted sending domain out of the spam folder.
+ */
+export const SUBSCRIBER_STATUSES = [
+  "pending",
+  "subscribed",
+  "unsubscribed",
+  "bounced",
+  "complained",
+] as const;
+export type SubscriberStatus = (typeof SUBSCRIBER_STATUSES)[number];
+
+export const subscribers = pgTable(
+  "subscribers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Stored lowercased and trimmed; the unique index is what dedupes signups. */
+    email: text("email").notNull().unique(),
+    name: text("name"),
+    status: text("status").notNull().default("pending").$type<SubscriberStatus>(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+
+    /*
+      Acquisition attribution, captured once at signup and never updated.
+
+      A subscriber's *first* touch is the interesting one — which post, which
+      campaign, which referrer actually earned the address. Overwriting it on a
+      later visit would turn every channel report into a report about whichever
+      page they happened to be on most recently.
+    */
+    source: text("source").notNull().default("form"),
+    utmSource: text("utm_source"),
+    utmMedium: text("utm_medium"),
+    utmCampaign: text("utm_campaign"),
+    utmTerm: text("utm_term"),
+    utmContent: text("utm_content"),
+    /** Origin only — the full referring URL can carry a query string with PII. */
+    referrerHost: text("referrer_host"),
+    /** The path they subscribed from, which is usually the post that convinced them. */
+    landingPath: text("landing_path"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    // Drives the audience list and the "who gets this send" query.
+    index("subscribers_status_created_idx").on(table.status, table.createdAt.desc()),
+    // Drives the 30-day acquisition series.
+    index("subscribers_created_at_idx").on(table.createdAt.desc()),
+    // Drives the churn half of the same chart.
+    index("subscribers_unsubscribed_at_idx").on(table.unsubscribedAt.desc()),
+    check(
+      "subscribers_status_check",
+      sql`${table.status} in ('pending', 'subscribed', 'unsubscribed', 'bounced', 'complained')`,
+    ),
+  ],
+);
+
+export const CAMPAIGN_STATUSES = ["draft", "sending", "sent", "failed"] as const;
+export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
+
+/**
+ * One send to the list.
+ *
+ * Usually a post going out, in which case `post_id` is set and the body is
+ * rendered from that post. `post_id` is nullable so a plain broadcast (a note
+ * to readers that is not itself an article) is the same object.
+ *
+ * Rates are *not* stored here. Opens and clicks are counted off `email_sends`,
+ * which is the row the tracking pixel already has to touch — a denormalised
+ * counter would be a second write that can fail on its own, and every number
+ * on the analytics screen would then be a number nobody could reproduce.
+ */
+export const emailCampaigns = pgTable(
+  "email_campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id").references(() => posts.id, { onDelete: "set null" }),
+    subject: text("subject").notNull(),
+    /** Snapshot of what went out. A later edit to the post must not rewrite history. */
+    bodyHtml: text("body_html"),
+    bodyText: text("body_text"),
+    status: text("status").notNull().default("draft").$type<CampaignStatus>(),
+    /** How many rows we set out to write; `email_sends` is the record of what happened. */
+    recipientCount: integer("recipient_count").notNull().default(0),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("email_campaigns_created_idx").on(table.createdAt.desc()),
+    index("email_campaigns_post_idx").on(table.postId),
+    check(
+      "email_campaigns_status_check",
+      sql`${table.status} in ('draft', 'sending', 'sent', 'failed')`,
+    ),
+  ],
+);
+
+export const SEND_STATUSES = ["queued", "sent", "failed"] as const;
+export type SendStatus = (typeof SEND_STATUSES)[number];
+
+/**
+ * One campaign, one subscriber.
+ *
+ * This is the row the open pixel and the click redirect resolve to, and the
+ * row every rate on the analytics screens is computed from:
+ *
+ *   open rate = opened_at is not null / status = 'sent'
+ *   CTOR      = clicked_at is not null / opened_at is not null
+ *
+ * `opened_at` is the *first* open and `open_count` the total, because a
+ * forwarded email or a mail client that re-fetches images would otherwise
+ * make one reader look like several.
+ */
+export const emailSends = pgTable(
+  "email_sends",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => emailCampaigns.id, { onDelete: "cascade" }),
+    subscriberId: uuid("subscriber_id")
+      .notNull()
+      .references(() => subscribers.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("queued").$type<SendStatus>(),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    openCount: integer("open_count").notNull().default(0),
+    clickedAt: timestamp("clicked_at", { withTimezone: true }),
+    clickCount: integer("click_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // One row per pair, so a retried send updates rather than duplicates —
+    // and so a subscriber can never be mailed the same campaign twice.
+    unique("email_sends_campaign_subscriber_key").on(
+      table.campaignId,
+      table.subscriberId,
+    ),
+    // Drives every per-campaign rate.
+    index("email_sends_campaign_idx").on(table.campaignId),
+    // Drives the per-subscriber lifetime rates on the profile screen.
+    index("email_sends_subscriber_idx").on(table.subscriberId),
+    check(
+      "email_sends_status_check",
+      sql`${table.status} in ('queued', 'sent', 'failed')`,
+    ),
+  ],
+);
+
+export const SUBSCRIBER_EVENT_TYPES = [
+  "subscribed",
+  "confirmed",
+  "unsubscribed",
+  "sent",
+  "opened",
+  "clicked",
+  "bounced",
+  "complained",
+] as const;
+export type SubscriberEventType = (typeof SUBSCRIBER_EVENT_TYPES)[number];
+
+/**
+ * The chronological feed on a subscriber's profile.
+ *
+ * Overlaps with `email_sends` on purpose. That table holds the *current state*
+ * of a send and answers "what is the open rate"; this one is append-only and
+ * answers "what happened, in order" — including the second open and the third
+ * click, which the state row deliberately collapses.
+ */
+export const subscriberEvents = pgTable(
+  "subscriber_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subscriberId: uuid("subscriber_id")
+      .notNull()
+      .references(() => subscribers.id, { onDelete: "cascade" }),
+    /** Null for lifecycle events (subscribed, unsubscribed) that belong to no send. */
+    sendId: uuid("send_id").references(() => emailSends.id, { onDelete: "cascade" }),
+    type: text("type").notNull().$type<SubscriberEventType>(),
+    /** The destination, for a click. */
+    url: text("url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("subscriber_events_subscriber_idx").on(
+      table.subscriberId,
+      table.createdAt.desc(),
+    ),
+    check(
+      "subscriber_events_type_check",
+      sql`${table.type} in ('subscribed', 'confirmed', 'unsubscribed', 'sent', 'opened', 'clicked', 'bounced', 'complained')`,
+    ),
+  ],
+);
+
+/**
+ * Runtime configuration that belongs to the person, not the deployment.
+ *
+ * SMTP hostnames and newsletter copy change with the mood; they should not
+ * need a redeploy. Values are JSON so one row can hold a whole settings group.
+ *
+ * Anything secret in here is encrypted before it lands (see src/lib/settings.ts)
+ * — a database backup is a much more casual artefact than a Worker secret.
+ */
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+/* ------------------------------------------------------------------------ *
+ * Federation (ActivityPub)
+ * ------------------------------------------------------------------------ */
+
+/**
+ * A remote account following this blog's actor.
+ *
+ * `shared_inbox_uri` is what makes delivery affordable: a thousand followers
+ * on one Mastodon instance are one POST to that instance's shared inbox, not a
+ * thousand POSTs. Delivery groups by `coalesce(shared_inbox_uri, inbox_uri)`.
+ */
+export const apFollowers = pgTable(
+  "ap_followers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The follower's canonical id, e.g. https://mastodon.social/users/alice. */
+    actorUri: text("actor_uri").notNull().unique(),
+    inboxUri: text("inbox_uri").notNull(),
+    sharedInboxUri: text("shared_inbox_uri"),
+    /** Cached for display, never trusted for identity. */
+    handle: text("handle"),
+    /** Unfollows keep the row so the history survives; delivery filters on this. */
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("ap_followers_active_idx").on(table.active)],
+);
+
+/**
+ * One outbound federated delivery attempt.
+ *
+ * Federation fails constantly and silently — instances go down, block you, or
+ * change their key. Without a log the only symptom is "nobody saw the post",
+ * which is indistinguishable from "nobody cared".
+ */
+export const apDeliveries = pgTable(
+  "ap_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id").references(() => posts.id, { onDelete: "cascade" }),
+    inboxUri: text("inbox_uri").notNull(),
+    /** HTTP status from the remote inbox, or null if the request never completed. */
+    statusCode: integer("status_code"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("ap_deliveries_post_idx").on(table.postId, table.createdAt.desc())],
 );
 
 export const postsRelations = relations(posts, ({ many }) => ({
@@ -343,6 +710,13 @@ export const schema = {
   postRevisions,
   pages,
   redirects,
+  subscribers,
+  emailCampaigns,
+  emailSends,
+  subscriberEvents,
+  settings,
+  apFollowers,
+  apDeliveries,
 };
 
 export type RedirectRow = typeof redirects.$inferSelect;
@@ -354,3 +728,9 @@ export type PostRow = typeof posts.$inferSelect;
 export type NewPostRow = typeof posts.$inferInsert;
 export type TagRow = typeof tags.$inferSelect;
 export type MediaRow = typeof media.$inferSelect;
+export type SubscriberRow = typeof subscribers.$inferSelect;
+export type EmailCampaignRow = typeof emailCampaigns.$inferSelect;
+export type EmailSendRow = typeof emailSends.$inferSelect;
+export type SubscriberEventRow = typeof subscriberEvents.$inferSelect;
+export type SettingRow = typeof settings.$inferSelect;
+export type ApFollowerRow = typeof apFollowers.$inferSelect;

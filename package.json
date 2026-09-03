@@ -13,9 +13,10 @@
     "db:studio": "drizzle-kit studio",
     "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts",
     "smoke": "./scripts/smoke.sh",
-    "cf:build": "opennextjs-cloudflare build",
-    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf:build": "opennextjs-cloudflare build && npm run cf:trim",
+    "cf:trim": "tsx scripts/strip-og-wasm.ts",
+    "cf:preview": "npm run cf:build && opennextjs-cloudflare preview",
+    "cf:deploy": "npm run cf:build && opennextjs-cloudflare deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "og:generate": "tsx scripts/generate-og-images.ts",
     "db:seed-pages": "tsx scripts/seed-pages.ts"

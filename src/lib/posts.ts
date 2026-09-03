@@ -2,7 +2,9 @@ import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
 import { posts, type PostRow, type PostStatus } from "@/db/schema";
 import { ApiError, notFound } from "./http";
+import { rewriteInternalLinks } from "./internal-links";
 import { recordSlugChange } from "./redirects";
+import { siteUrl } from "./site";
 import { slugify, withUniqueSlug } from "./slug";
 import { snapshotPost, type RevisionReason } from "./revisions";
 import { getTagsForPosts, syncPostTags, type TagSummary } from "./tags";
@@ -193,9 +195,19 @@ export async function updatePost(
         ? await applyPatch(db, id, patch)
         : existing;
 
-  // The other half of a rename: the old URL keeps working.
+  /*
+    The other half of a rename, in two parts.
+
+    The redirect keeps the outside world working — inbound links, shares,
+    search results. The rewrite fixes this blog's own links, which a redirect
+    would leave pointing at a 301 forever, and which would silently point at
+    the *wrong post* if that slug were ever reused.
+  */
   if (row.slug !== existing.slug) {
     await recordSlugChange(db, `/${existing.slug}`, `/${row.slug}`);
+    await rewriteInternalLinks(db, `/${existing.slug}`, `/${row.slug}`, {
+      siteUrl: siteUrl(),
+    });
   }
 
   const tags = input.tags ? await syncPostTags(db, id, input.tags) : previousTags;

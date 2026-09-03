@@ -55,7 +55,7 @@ export async function teardownDatabase(): Promise<void> {
  */
 export async function resetTables(): Promise<void> {
   await db().execute(
-    sql`truncate table comments, post_tags, post_revisions, posts, tags, media, series, pages, redirects restart identity cascade`,
+    sql`truncate table comments, post_tags, post_revisions, posts, tags, media, series, pages, redirects, subscriber_events, email_sends, email_campaigns, subscribers, settings, ap_followers, ap_deliveries restart identity cascade`,
   );
 }
 

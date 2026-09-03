@@ -1,7 +1,8 @@
 import { count, desc, eq, ilike, or } from "drizzle-orm";
 import type { BlogDatabase } from "@/db/client";
-import { media, pages, posts, type MediaRow } from "@/db/schema";
+import { media, pages, posts, type MediaRole, type MediaRow } from "@/db/schema";
 import { ApiError, notFound } from "./http";
+import { extractExif, readImageDimensions, type ExifData } from "./image-metadata";
 import { MAX_UPLOAD_BYTES } from "./upload-limits";
 import { publicUrlForKey } from "./r2";
 
@@ -83,8 +84,33 @@ export type UploadedMedia = {
   filename: string | null;
   content_type: string | null;
   size_bytes: number | null;
+  role: MediaRole;
+  long_description: string | null;
+  width: number | null;
+  height: number | null;
+  blurhash: string | null;
+  lqip: string | null;
+  exif: ExifData | null;
   created_at: string;
 };
+
+/**
+ * Measurements the browser took at upload time.
+ *
+ * The placeholder needs a real pixel decode, which no Worker can do — see
+ * src/lib/image-placeholder.ts. Dimensions arrive too but are only a fallback:
+ * the server reads them from the file header itself, and prefers its own.
+ */
+export type ClientImageMetadata = {
+  width?: number;
+  height?: number;
+  blurhash?: string;
+  lqip?: string;
+};
+
+// Lives in its own module so the browser can import it without pulling this
+// one — and with it Drizzle and the R2 binding — into the client bundle.
+export { altTextFor } from "./media-alt";
 
 /**
  * Validates, stores in R2, then records the object in `media`.
@@ -98,6 +124,11 @@ export async function uploadMedia(
   bucket: R2Bucket,
   file: File,
   altText: string | null,
+  options: {
+    role?: MediaRole;
+    longDescription?: string | null;
+    client?: ClientImageMetadata;
+  } = {},
 ): Promise<UploadedMedia> {
   if (file.size === 0) throw new ApiError(422, "File is empty");
   if (file.size > MAX_UPLOAD_BYTES) {
@@ -115,6 +146,20 @@ export async function uploadMedia(
       `Unsupported image format. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`,
     );
   }
+
+  /*
+    Read from the file's own header rather than trusting the browser. Both are
+    available — the client measures the decoded bitmap — but the client is a
+    client, and dimensions end up in `width`/`height` attributes that decide
+    page layout. The server's own reading wins; the client's is the fallback
+    for a format this cannot parse.
+  */
+  const dimensions =
+    readImageDimensions(bytes) ??
+    (options.client?.width && options.client?.height
+      ? { width: options.client.width, height: options.client.height }
+      : null);
+  const exif = extractExif(bytes);
 
   const key = buildMediaKey(file.name || "image", detected.ext);
   await bucket.put(key, bytes, {
@@ -135,6 +180,13 @@ export async function uploadMedia(
       filename: file.name || null,
       contentType: detected.mime,
       sizeBytes: file.size,
+      role: options.role ?? "informative",
+      longDescription: emptyToNull(options.longDescription),
+      width: dimensions?.width ?? null,
+      height: dimensions?.height ?? null,
+      blurhash: options.client?.blurhash ?? null,
+      lqip: options.client?.lqip ?? null,
+      exif: exif ?? null,
     })
     .returning();
 
@@ -179,16 +231,49 @@ export async function getMediaById(
   return row ?? null;
 }
 
-export async function setMediaAltText(
+/**
+ * Updates the fields that describe an image rather than the file itself.
+ *
+ * Role, alt text and long description travel together because they are one
+ * decision. Marking an image decorative while leaving alt text on it would
+ * store two contradictory answers to "what should a screen reader say"; the
+ * renderer resolves that in favour of the role (see `altTextFor`), and this
+ * keeps the row honest by clearing the text the role has made unreachable.
+ */
+export async function updateMedia(
   db: BlogDatabase,
   id: string,
-  altText: string | null,
+  patch: {
+    altText?: string | null;
+    role?: MediaRole;
+    longDescription?: string | null;
+  },
 ): Promise<UploadedMedia> {
-  const [row] = await db
-    .update(media)
-    .set({ altText: altText && altText.trim() !== "" ? altText.trim() : null })
-    .where(eq(media.id, id))
-    .returning();
+  const values: Partial<typeof media.$inferInsert> = {};
+  if (patch.altText !== undefined) values.altText = emptyToNull(patch.altText);
+  if (patch.role !== undefined) values.role = patch.role;
+  if (patch.longDescription !== undefined) {
+    values.longDescription = emptyToNull(patch.longDescription);
+  }
+
+  if (values.role === "decorative") {
+    values.altText = null;
+    values.longDescription = null;
+  }
+  // A long description only means anything for a complex image; leaving one
+  // behind on a chart that has been reclassified would render prose nothing
+  // points at.
+  if (values.role !== undefined && values.role !== "complex") {
+    values.longDescription = null;
+  }
+
+  if (Object.keys(values).length === 0) {
+    const existing = await getMediaById(db, id);
+    if (!existing) throw notFound("Media");
+    return serializeMedia(existing);
+  }
+
+  const [row] = await db.update(media).set(values).where(eq(media.id, id)).returning();
   if (!row) throw notFound("Media");
   return serializeMedia(row);
 }
@@ -271,6 +356,13 @@ export function serializeMedia(row: MediaRow): UploadedMedia {
     filename: row.filename,
     content_type: row.contentType,
     size_bytes: row.sizeBytes,
+    role: row.role,
+    long_description: row.longDescription,
+    width: row.width,
+    height: row.height,
+    blurhash: row.blurhash,
+    lqip: row.lqip,
+    exif: (row.exif as ExifData | null) ?? null,
     created_at:
       row.createdAt instanceof Date
         ? row.createdAt.toISOString()
@@ -280,4 +372,10 @@ export function serializeMedia(row: MediaRow): UploadedMedia {
 
 function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function emptyToNull(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
 }

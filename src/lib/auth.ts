@@ -33,69 +33,66 @@ export type AuthResult =
  * Routes that stay reachable without a session:
  *   - the login page and the endpoints that grant/clear a session
  *   - /media/* — uploaded images must load in a browser without a cookie
- *   - POST /api/comments *exactly* — the one public write in the app. Readers
- *     submit without an account; every submission lands as `pending` and is
- *     invisible until approved. Nothing else under /api/comments is open:
- *     listing and moderation both require a session.
+ *   - POST /api/comments *exactly* — readers submit without an account; every
+ *     submission lands as `pending` and is invisible until approved
+ *   - POST /api/subscribe *exactly* — the newsletter signup form, same deal.
+ *     Note the exact match: `startsWith("/api/subscribe")` would also open
+ *     `/api/subscribers`, which is the whole audience list.
+ *
+ * Everything else a reader touches — confirmation and unsubscribe links, the
+ * open pixel, the click redirect, the ActivityPub endpoints — is unlisted
+ * here because it is not under a protected prefix at all. Each of those
+ * carries its own signed token or its own signature check.
  */
 function isPublic(pathname: string, method: string): boolean {
   if (pathname === "/admin/login") return true;
   if (pathname === "/api/auth/login" || pathname === "/api/auth/logout") return true;
   if (pathname === "/media" || pathname.startsWith("/media/")) return true;
   if (pathname === "/api/comments" && method === "POST") return true;
+  if (pathname === "/api/subscribe" && method === "POST") return true;
   return false;
 }
 
-function isPostsApi(pathname: string): boolean {
-  return pathname === "/api/posts" || pathname.startsWith("/api/posts/");
-}
+/**
+ * Every API prefix that requires a session.
+ *
+ * One list, so adding an endpoint is one edit rather than two — and so the
+ * test in tests/auth.test.ts can assert that `proxy.ts`'s matcher covers all
+ * of them. A protected route missing from the matcher is not a broken route:
+ * it is an open one, and it fails silently.
+ */
+export const PROTECTED_API_PREFIXES = [
+  "/api/posts",
+  "/api/pages",
+  "/api/redirects",
+  "/api/import",
+  "/api/media",
+  "/api/comments",
+  "/api/series",
+  "/api/subscribers",
+  "/api/settings",
+  "/api/newsletter",
+] as const;
 
-function isPagesApi(pathname: string): boolean {
-  return pathname === "/api/pages" || pathname.startsWith("/api/pages/");
-}
-
-function isRedirectsApi(pathname: string): boolean {
-  return pathname === "/api/redirects" || pathname.startsWith("/api/redirects/");
-}
-
-function isImportApi(pathname: string): boolean {
-  return pathname === "/api/import" || pathname.startsWith("/api/import/");
+function matchesPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
 function isAdminRoute(pathname: string): boolean {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
-function isMediaApi(pathname: string): boolean {
-  return pathname === "/api/media" || pathname.startsWith("/api/media/");
-}
-
-function isCommentsApi(pathname: string): boolean {
-  return pathname === "/api/comments" || pathname.startsWith("/api/comments/");
-}
-
-function isSeriesApi(pathname: string): boolean {
-  return pathname === "/api/series" || pathname.startsWith("/api/series/");
-}
-
 /**
  * Whether this request needs a session.
  *
- * `/admin/*` is gated for every method; the JSON APIs are gated for mutations
- * only. Media upload is gated outright — there is no read side to it.
+ * `/admin/*` is gated for every method, as is every prefix above — there is no
+ * safe-method exemption anywhere in this file. The public site reads the
+ * database directly from server components and needs none of these.
  */
 export function isProtected(pathname: string, method: string): boolean {
   if (isPublic(pathname, method)) return false;
-  return (
-    isAdminRoute(pathname) ||
-    isPostsApi(pathname) ||
-    isPagesApi(pathname) ||
-    isRedirectsApi(pathname) ||
-    isImportApi(pathname) ||
-    isMediaApi(pathname) ||
-    isCommentsApi(pathname) ||
-    isSeriesApi(pathname)
-  );
+  if (isAdminRoute(pathname)) return true;
+  return PROTECTED_API_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix));
 }
 
 export function getSessionSecret(): string | undefined {

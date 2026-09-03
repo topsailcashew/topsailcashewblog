@@ -19,6 +19,7 @@ const SECTIONS = [
   { label: "Articles", href: "/admin/articles" },
   { label: "Pages", href: "/admin/pages" },
   { label: "Comments", href: "/admin/comments" },
+  { label: "Audience", href: "/admin/subscribers" },
 ] as const;
 
 const LIBRARY = [
@@ -26,6 +27,7 @@ const LIBRARY = [
   { label: "Series", href: "/admin/series" },
   { label: "Redirects", href: "/admin/redirects" },
   { label: "Import", href: "/admin/import" },
+  { label: "Settings", href: "/admin/settings" },
 ] as const;
 
 export default function DashboardLayout({

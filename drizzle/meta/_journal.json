@@ -64,6 +64,13 @@
       "when": 1788357937221,
       "tag": "0008_page_cover_image",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788377584319,
+      "tag": "0009_audience_media_federation",
+      "breakpoints": true
     }
   ]
 }

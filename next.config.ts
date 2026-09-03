@@ -12,6 +12,17 @@ const nextConfig: NextConfig = {
     proxyClientMaxBodySize: MAX_UPLOAD_BYTES + 2 * 1024 * 1024,
   },
 
+  /*
+    WebFinger has to answer at /.well-known/webfinger — that path is baked
+    into every fediverse client, and it is the only way `@name@host` resolves
+    to anything. A directory beginning with a dot is not a route Next will
+    reliably pick up, so the handler lives at /api/webfinger and this points
+    the well-known path at it.
+  */
+  async rewrites() {
+    return [{ source: "/.well-known/webfinger", destination: "/api/webfinger" }];
+  },
+
   async redirects() {
     return [
       // The archive was /stories before the nav was reworked. Permanent, so

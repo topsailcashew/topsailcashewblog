@@ -59,6 +59,8 @@ uploads and the page cache work before any of them exist.
 | `ADMIN_EMAIL` | no | comments | Recorded against replies you write from the moderation queue. Cosmetic; never shown publicly. |
 | `TEST_DATABASE_URL` | tests only | `npm test` | A scratch database. **The suite truncates every table**, so never point this at real data. Falls back to `DATABASE_URL` if unset. |
 | `NEON_FETCH_ENDPOINT` | no | app | Redirects the Neon HTTP driver at a local SQL-over-HTTP proxy (e.g. Neon Local) so `next dev` can run against a plain Postgres. Leave unset in production. |
+| `SMTP_PASSWORD` | no | newsletter | Overrides whatever the settings screen stored. A Worker secret is not in backups and not in a `select *`, so this is the better place for it. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USERNAME`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | no | newsletter | Each overrides the stored value field by field, so a deployment can supply only what it wants to pin. |
 
 **R2 needs no credentials.** The bucket is reached through the `MEDIA_BUCKET`
 binding declared in [`wrangler.jsonc`](wrangler.jsonc), so there is no access
@@ -76,7 +78,16 @@ In production these are Worker **secrets**, not plaintext vars:
 npx wrangler secret put DATABASE_URL
 npx wrangler secret put ADMIN_PASSWORD
 npx wrangler secret put SESSION_SECRET
+
+# Only if you would rather not keep the mail password in the database.
+npx wrangler secret put SMTP_PASSWORD
 ```
+
+> `SESSION_SECRET` now does more than sign cookies: it also derives the AES-GCM
+> key that encrypts the stored SMTP password and the fediverse private key.
+> Rotating it discards both — which is correct (rotating it already invalidates
+> every session), but it means re-entering the mail password and, if federation
+> is on, minting a new signing key that remote servers will have to re-fetch.
 
 ---
 
@@ -1566,6 +1577,175 @@ the natural next addition; the rest need an identity model this blog does not
 have.
 
 ---
+
+## The newsletter
+
+Self-hosted, over SMTP. There is no provider SDK: `src/lib/email/smtp.ts` is a
+small SMTP client spoken over `cloudflare:sockets`, which is the only way to
+reach a mail server from a Worker — there is no Node `net` here, so no existing
+package runs. It handles STARTTLS on 587 and implicit TLS on 465. Port 25 is
+blocked outbound on Cloudflare's network and always will be.
+
+Settings live in the `settings` table rather than in the deployment, so the
+from-address can change without a redeploy. The SMTP password is encrypted at
+rest with AES-GCM under a key derived from `SESSION_SECRET`, and never returned
+to the browser — the API answers `has_password: true` and nothing else. An
+`SMTP_PASSWORD` Worker secret overrides whatever is stored, and remains the
+safer place for it.
+
+### The send
+
+The unit of work is `email_sends`: one row per (campaign, subscriber), unique
+on the pair. That constraint is the whole design. A send that dies halfway
+leaves rows for everyone already mailed, and re-running picks up exactly the
+recipients with no row yet — found by anti-join, not by an offset that would
+drift the moment somebody subscribed mid-send.
+
+One request mails `DEFAULT_BATCH_SIZE` recipients, because a Worker cannot hold
+hundreds of outbound TCP connections open. The editor loops until `remaining`
+reaches zero; closing the tab stops the loop without losing the send.
+
+The campaign body is snapshotted once. Editing a post after it has been mailed
+must not change what the archive says was sent, and a resumed send has to put
+the same words in front of the second half of the list as the first half got.
+
+### Rates
+
+Nothing is denormalised. Open rate and CTOR are computed from `email_sends` —
+the row the tracking pixel already has to touch — so no number on any screen
+can disagree with the rows beneath it.
+
+- **open rate** = sends with `opened_at` / sends with status `sent`
+- **CTOR** = sends with `clicked_at` / sends with `opened_at`
+
+CTOR rather than click-through rate on purpose: CTR mixes a subject line
+nobody opened with a piece nobody wanted to read further, and only the second
+is about the writing.
+
+Recording a click also stamps `opened_at`, because most clients block remote
+images and a click that never registered an open would push CTOR over 100%.
+Open tracking is an estimate and the dashboard treats it as one: Apple Mail
+Privacy Protection pre-fetches every image, everything else blocks them by
+default. The number is useful against this blog's own past sends and useless
+in absolute terms — which is why every rate in the article list is shown as a
+delta against a rolling ten-campaign average rather than on its own.
+
+### Reader-facing endpoints
+
+All public, none under a protected prefix, each carrying its own signed token
+(`src/lib/email/tokens.ts`, built on `src/lib/signed-token.ts`):
+
+| Path | Purpose |
+|---|---|
+| `POST /api/subscribe` | Signup. Answers identically whatever the address's state, so it is not a membership oracle. |
+| `/newsletter/confirm?t=` | Double opt-in. Confirms on GET — the reader asked for exactly this. |
+| `/newsletter/unsubscribe?t=` | A page with a button. Does **not** act on GET: mail clients and security scanners prefetch links. |
+| `POST /e/u?t=` | RFC 8058 one-click, and the target of that button. |
+| `/e/o/<token>` | Open pixel. Always returns the 43-byte GIF, valid token or not. |
+| `/e/c/<token>` | Click redirect. The destination is signed *into* the token — a `?url=` parameter would be an open redirect on this domain. |
+
+## Federation (ActivityPub)
+
+Off by default; switched on in Settings, at which point an RSA key pair is
+generated on the first fetch of the actor document and stored encrypted.
+
+Posts federate as `Note`, not `Article`. Article is semantically correct and
+almost nothing renders it — Mastodon shows one as a bare link. The Note carries
+the title, the summary and a link home, which is a shape a timeline can use.
+
+Each post is announced exactly once, guarded by a conditional write to
+`posts.federated_at`, so two concurrent publishes cannot both broadcast it. An
+`Update` activity is honoured by some instances and ignored by others, so a
+republish would put a duplicate in some timelines and nothing in the rest.
+
+Delivery groups by shared inbox: a thousand followers on one instance are one
+POST, not a thousand. Every attempt is logged to `ap_deliveries`, because
+federation fails constantly and "nobody saw the post" is otherwise
+indistinguishable from "nobody cared".
+
+WebFinger answers at `/.well-known/webfinger` through a rewrite in
+`next.config.ts` — a directory beginning with a dot is not a route Next picks
+up reliably, and that exact path is baked into every fediverse client.
+
+### The inbox
+
+Open, because there is no other way for a stranger's server to reach us, and
+safe for two reasons. The HTTP signature is verified before any field of the
+body is read — against a key fetched from the actor's own server — and the
+signing key must belong to the actor the body claims to be, or anyone with a
+fediverse account could post activities attributed to someone else. Second,
+nothing it can do is privileged: a reply lands in the same moderation queue as
+a comment typed into the page, as `pending`, invisible until approved by hand.
+
+Signatures follow `draft-cavage-http-signatures-12`, which expired years ago
+and is what every implementation actually speaks. RFC 9421 would be correct and
+would federate with nothing.
+
+## Content as blocks
+
+`posts.content_json` has been the source of truth since the editor landed;
+`content_html` is a derived cache. But ProseMirror's JSON is an *editor*
+schema — it nests a paragraph inside every list item and expresses bold as an
+entry in a `marks` array — so handing it to another platform would make that
+platform depend on the internals of this blog's editor.
+
+`src/lib/blocks.ts` is the seam: a flat, versioned block list served from
+`GET /api/content/:slug`. Formatting travels as character ranges rather than
+nesting, because `NSAttributedString`, `Spannable` and `TextSpan` all work that
+way and none of them parse HTML.
+
+## Images
+
+Three kinds of metadata, extracted in two places, because they need different
+things:
+
+- **Dimensions** and **EXIF** are read from the file's own header bytes on the
+  server (`src/lib/image-metadata.ts`). Neither needs a decode, so every
+  upload gets them regardless of which client made it. The GPS IFD is
+  deliberately never read — a phone photo routinely carries the coordinates of
+  the house it was taken in.
+- **BlurHash** and **LQIP** need real pixels, which no Worker can produce.
+  They are generated in the browser at upload (`src/lib/image-placeholder.ts`)
+  and posted alongside the file, then validated like any other client input.
+
+`media.role` is the accessibility field, and it is not decoration: alt text is
+a function of what an image is *for*. A `decorative` image renders `alt=""`,
+which makes a screen reader skip it — meaningfully different from a missing
+alt, which makes it announce the filename. `altTextFor()` is the one place
+that resolves it.
+
+## Self-healing links
+
+A redirect keeps the outside world working. It does nothing for the links this
+blog holds about itself, which then go through a 301 forever — and which point
+at *the wrong article* if that slug is ever reused, since the redirect is
+correctly dropped when a post moves in.
+
+So a rename does both: `recordSlugChange` writes the redirect, and
+`rewriteInternalLinks` repoints every link in every other post and page, then
+re-derives their HTML. It runs inline rather than in the background, because
+the rename already invalidates the public cache and a rewrite landing after
+that drop would leave the old links sitting in freshly-cached pages.
+
+## Worker size
+
+Cloudflare's limit is 3 MiB gzipped and this app runs close to it. Two things
+keep it there:
+
+- The editor is loaded with `dynamic(..., { ssr: false })`, keeping Tiptap and
+  ProseMirror out of the server bundle entirely.
+- `scripts/strip-og-wasm.ts` runs after every `cf:build`. Next puts `next/og` —
+  Satori plus resvg, as two WebAssembly modules — into the proxy bundle
+  unconditionally, and nothing here renders an image at request time: the
+  social cards are built by `scripts/generate-og-images.ts` into `public/og`.
+  Those modules are 545 KiB gzipped of code that cannot run, and there is no
+  supported way to opt out.
+
+Check the number before deploying:
+
+```bash
+npx wrangler deploy --dry-run --outdir /tmp/dryrun
+```
 
 ## Decisions
 

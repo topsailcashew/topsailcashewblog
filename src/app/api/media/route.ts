@@ -4,6 +4,8 @@ import { ApiError, handle, json } from "@/lib/http";
 import { countMedia, listMedia, uploadMedia } from "@/lib/media";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-limits";
 import { getMediaBucket } from "@/lib/r2";
+import { imageMetadataSchema } from "@/lib/validation";
+import { MEDIA_ROLES, type MediaRole } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -33,14 +35,41 @@ export const POST = handle(async (request: NextRequest) => {
     throw new ApiError(422, "Missing `file` field");
   }
 
-  const altValue = form.get("alt_text");
-  const altText = typeof altValue === "string" && altValue.trim() !== ""
-    ? altValue.trim()
-    : null;
+  const altText = text(form.get("alt_text"));
+  const roleValue = text(form.get("role"));
+  const role = MEDIA_ROLES.includes(roleValue as MediaRole)
+    ? (roleValue as MediaRole)
+    : undefined;
 
-  const uploaded = await uploadMedia(getDb(), await getMediaBucket(), file, altText);
+  /*
+    Measurements the browser took. Parsed through the same schema as anything
+    else a client sends: `lqip` in particular is inlined into pages, so an
+    unbounded string here would be a way to stow a payload in every page an
+    image appears on.
+  */
+  const metadataValue = text(form.get("metadata"));
+  let client;
+  if (metadataValue) {
+    try {
+      client = imageMetadataSchema.parse(JSON.parse(metadataValue));
+    } catch {
+      // Placeholders are a nicety. A malformed one is not worth failing an
+      // upload the writer is waiting on.
+      client = undefined;
+    }
+  }
+
+  const uploaded = await uploadMedia(getDb(), await getMediaBucket(), file, altText, {
+    role,
+    longDescription: text(form.get("long_description")),
+    client,
+  });
   return json({ media: uploaded }, 201);
 });
+
+function text(value: FormDataEntryValue | null): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
 
 /** GET /api/media — recent uploads, newest first. `?q=` searches, `?offset=`. */
 export const GET = handle(async (request: NextRequest) => {

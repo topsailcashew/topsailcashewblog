@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { NextRequest } from "next/server";
-import { authorize, isProtected } from "@/lib/auth";
+import { PROTECTED_API_PREFIXES, authorize, isProtected } from "@/lib/auth";
 import { safeRedirectPath } from "@/lib/redirect";
 import { SESSION_COOKIE, createSessionToken } from "@/lib/session";
 
@@ -124,5 +124,76 @@ describe("safeRedirectPath", () => {
     assert.equal(safeRedirectPath("/admin/login"), "/admin");
     assert.equal(safeRedirectPath(null), "/admin");
     assert.equal(safeRedirectPath(""), "/admin");
+  });
+});
+
+describe("the proxy matcher and the protected list agree", () => {
+  it("routes every protected prefix through the proxy", async () => {
+    // A prefix gated in auth.ts but absent from proxy.ts's matcher does not
+    // fail: the proxy simply never runs for it, and the route is open with
+    // nothing to notice. This is the check that would have caught it.
+    const { config } = await import("@/proxy");
+    const matched = new Set(
+      config.matcher.map((pattern) => pattern.replace(/\/:path\*$/, "")),
+    );
+
+    for (const prefix of PROTECTED_API_PREFIXES) {
+      assert.ok(
+        matched.has(prefix),
+        `${prefix} is gated in auth.ts but missing from the proxy matcher`,
+      );
+    }
+    assert.ok(matched.has("/admin"));
+  });
+
+  it("gates the audience, settings and newsletter endpoints", () => {
+    const gated: [string, string][] = [
+      ["/api/subscribers", "GET"],
+      ["/api/subscribers/abc", "GET"],
+      ["/api/subscribers/abc", "DELETE"],
+      ["/api/settings", "GET"],
+      ["/api/settings", "PUT"],
+      ["/api/settings/test", "POST"],
+      ["/api/newsletter", "GET"],
+      ["/api/posts/abc/newsletter", "POST"],
+      ["/admin/subscribers", "GET"],
+      ["/admin/settings", "GET"],
+    ];
+    for (const [pathname, method] of gated) {
+      assert.equal(isProtected(pathname, method), true, `${method} ${pathname}`);
+    }
+  });
+
+  it("opens the signup endpoint without opening the subscriber list", () => {
+    /*
+      "/api/subscribers".startsWith("/api/subscribe") is true. If the public
+      exemption were a prefix match rather than an exact one, opening the
+      signup form would also have published the entire audience — every
+      address, every UTM tag — to anyone who asked.
+    */
+    assert.equal(isProtected("/api/subscribe", "POST"), false);
+    for (const method of ["GET", "POST", "PATCH", "DELETE"]) {
+      assert.equal(
+        isProtected("/api/subscribers", method),
+        true,
+        `${method} /api/subscribers`,
+      );
+      assert.equal(isProtected("/api/subscribers/abc", method), true);
+    }
+  });
+
+  it("leaves the reader-facing email endpoints open", () => {
+    // Each carries its own signed token; none is under a protected prefix.
+    const open: [string, string][] = [
+      ["/e/o/token", "GET"],
+      ["/e/c/token", "GET"],
+      ["/e/u", "GET"],
+      ["/e/u", "POST"],
+      ["/newsletter/confirm", "GET"],
+      ["/newsletter/unsubscribe", "GET"],
+    ];
+    for (const [pathname, method] of open) {
+      assert.equal(isProtected(pathname, method), false, `${method} ${pathname}`);
+    }
   });
 });

@@ -71,8 +71,17 @@ export default function RootLayout({
       lang={siteConfig.language}
       className={`${displayFace.variable} ${uiFace.variable} ${bodyFace.variable}`}
     >
-      <body>
+      {/*
+        The site graph goes in the head, which is where a crawler looks first
+        and the only place a root layout can put anything. Per-page blocks —
+        the article, its breadcrumb — are rendered by the pages themselves and
+        land in the body; schema.org, Google and Bing all read JSON-LD from
+        either, and Next's Metadata API has no slot for a script tag.
+      */}
+      <head>
         <JsonLd json={websiteJsonLd()} />
+      </head>
+      <body>
         {children}
         <Analytics />
       </body>

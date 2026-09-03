@@ -5,9 +5,11 @@ import {
   comments,
   posts,
   type CommentRow,
+  type CommentSource,
   type CommentStatus,
 } from "@/db/schema";
 import { ApiError, notFound } from "./http";
+import { siteConfig } from "./site";
 
 export { COMMENT_STATUSES, type CommentStatus };
 
@@ -39,10 +41,13 @@ export type ModerationComment = {
   post: { id: string; title: string; slug: string } | null;
   parent_id: string | null;
   author_name: string;
-  author_email: string;
+  /** Null for a federated reply, which arrives with an actor URI instead. */
+  author_email: string | null;
   body: string;
   status: CommentStatus;
   is_author: boolean;
+  source: CommentSource;
+  remote_actor_uri: string | null;
   created_at: string;
 };
 
@@ -195,7 +200,7 @@ export async function replyAsAuthor(
       postId: parent.postId,
       parentId: parent.parentId ?? parent.id,
       authorName: input.authorName,
-      authorEmail: input.authorEmail ?? "",
+      authorEmail: input.authorEmail ?? siteConfig.contactEmail,
       body: input.body.trim(),
       status: "approved",
       isAuthor: true,
@@ -269,6 +274,8 @@ async function withPostContext(
     body: row.body,
     status: row.status,
     is_author: row.isAuthor,
+    source: row.source,
+    remote_actor_uri: row.remoteActorUri,
     created_at: iso(row.createdAt),
   }));
 }
