@@ -149,6 +149,52 @@ describe(
       assert.deepEqual(await searchPublished(db(), "qwertyuiop zxcvbnm"), []);
     });
 
+    it("does not match a query buried inside a longer word", async () => {
+      /*
+        The first cut of this used `word_similarity`, which scores the query
+        against any contiguous extent of the text — so "zzzznothing" matched
+        "Every*thing*, Everything" and shipped. Worse, the bare word "thing"
+        scored 0.667 that way, above real typos like "urgncy" at 0.500, so no
+        threshold could have separated them. `strict_word_similarity` only
+        considers whole-word extents.
+
+        The original test passed because it used a string sharing no letters
+        with anything, which is the one kind of nonsense the lenient form also
+        rejects.
+      */
+      await createPost(db(), {
+        title: "Everything, Everything",
+        excerpt: null,
+        content_html: "<p>A sentence I keep turning over.</p>",
+        status: "published",
+      });
+
+      for (const nonsense of ["zzzznothing", "xylophone", "asdfgh"]) {
+        assert.deepEqual(
+          await searchPublished(db(), nonsense),
+          [],
+          `"${nonsense}" matched something it should not have`,
+        );
+      }
+    });
+
+    it("still catches the typos the strict form is there to catch", async () => {
+      await seed();
+      /*
+        A regression guard on the threshold, not on the function. These are
+        the measured scores 0.32 was chosen to sit below — raising the cutoff
+        to exclude more nonsense would start dropping these.
+      */
+      for (const [typo, expected] of [
+        ["sofware", "Notes on slow software"],
+        ["personalty", "New Paths"],
+        ["slwo software", "Notes on slow software"],
+      ] as const) {
+        const results = await searchPublished(db(), typo);
+        assert.equal(results[0]?.title, expected, `"${typo}" found nothing`);
+      }
+    });
+
     it("never reaches a draft through the fuzzy path", async () => {
       await createPost(db(), {
         title: "Unpublished thoughts",

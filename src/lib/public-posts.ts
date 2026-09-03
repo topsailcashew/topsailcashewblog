@@ -175,14 +175,17 @@ export async function searchPublished(
 }
 
 /**
- * How close a trigram match has to be before it is offered.
+ * How close a match has to be before it is offered.
  *
- * Postgres defaults to 0.3, which at this corpus size returns something for
- * almost any input — and a wrong answer confidently offered is worse than an
- * empty state that suggests reading instead. 0.28 on a word-boundary
- * comparison tolerates a transposition or a missing letter and little more.
+ * Measured against this archive rather than guessed. Real typos score
+ * 0.33–0.75 ("pivto" 0.33, "urgncy" 0.50, "everythin" 0.75); strings that
+ * merely share letters score below 0.31 ("thing" 0.308, "nothing" 0.273,
+ * "zzzznothing" 0.222). 0.32 sits in that gap.
+ *
+ * The line matters because a confident wrong answer is worse than the empty
+ * state, which now offers three pieces to read instead of an apology.
  */
-const TRIGRAM_THRESHOLD = 0.28;
+const TRIGRAM_THRESHOLD = 0.32;
 
 /**
  * The typo-tolerant fallback.
@@ -203,9 +206,25 @@ async function searchByTrigram(
   query: string,
 ): Promise<SearchResult[]> {
   try {
+    /*
+      `strict_word_similarity`, not `word_similarity`.
+
+      The lenient form scores the query against any contiguous extent of the
+      text, so "zzzznothing" matches "Every*thing*" and — worse — the nonsense
+      word "thing" scored 0.667 against this archive, above genuine typos like
+      "urgncy" at 0.500. No threshold separates those. The strict form only
+      considers extents that begin and end on word boundaries, which is what
+      "did they mean this word" actually asks.
+
+      This scans rather than using the trigram indexes: those serve the `%`
+      operator family, and the operators take their cutoff from a session GUC
+      that the HTTP driver gives no good place to set. An explicit comparison
+      over one blog's worth of rows costs less than the round trip would, and
+      it only runs when full-text already came back empty.
+    */
     const similarity = sql<number>`greatest(
-      word_similarity(${query}, ${posts.title}),
-      word_similarity(${query}, coalesce(${posts.excerpt}, ''))
+      strict_word_similarity(${query}, ${posts.title}),
+      strict_word_similarity(${query}, coalesce(${posts.excerpt}, ''))
     )`;
 
     const rows = await db
