@@ -62,7 +62,7 @@ uploads and the page cache work before any of them exist.
 | `SMTP_PASSWORD` | no | newsletter | Overrides whatever the settings screen stored. A Worker secret is not in backups and not in a `select *`, so this is the better place for it. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USERNAME`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | no | newsletter | Each overrides the stored value field by field, so a deployment can supply only what it wants to pin. |
 | `GEMINI_API_KEY` | no | writing assistance | Overrides the key stored by the settings screen. Without it the editor's readability numbers still work — they are local — but the structural read, suggestions and cover generation are off. |
-| `GEMINI_TEXT_MODEL`, `GEMINI_IMAGE_MODEL` | no | writing assistance | Pin a model id without a deploy. Defaults `gemini-2.5-flash` and `gemini-2.5-flash-image`. |
+| `GEMINI_TEXT_MODEL`, `GEMINI_IMAGE_MODEL` | no | writing assistance | Pin a model id without a deploy. Defaults `gemini-3.8-flash` and `gemini-3.1-flash-image` (Nano Banana 2). Ids move; **Test connection** lists the ones the key can reach. |
 
 **R2 needs no credentials.** The bucket is reached through the `MEDIA_BUCKET`
 binding declared in [`wrangler.jsonc`](wrangler.jsonc), so there is no access

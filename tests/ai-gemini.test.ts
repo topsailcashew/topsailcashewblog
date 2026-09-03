@@ -3,8 +3,10 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import {
   GeminiError,
+  closestModels,
   generateImage,
   generateJson,
+  listModels,
   toApiError,
   type GeminiTransport,
 } from "@/lib/ai/gemini";
@@ -190,6 +192,109 @@ describe("failure mapping", () => {
     // `handle()` turns anything that is not an ApiError into "Internal server
     // error", which tells the author nothing.
     assert.equal(toApiError(new Error("socket hang up")).status, 502);
+  });
+});
+
+describe("listing the models a key can reach", () => {
+  const model = (name: string, methods = ["generateContent"]) => ({
+    name: `models/${name}`,
+    displayName: name,
+    supportedGenerationMethods: methods,
+  });
+
+  it("asks with GET, and keeps the key out of the URL", async () => {
+    const { transport, seen } = scripted(200, { models: [model("gemini-9-flash")] });
+    await listModels({ key: "secret-key", transport });
+
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]!.init.method, "GET");
+    assert.match(seen[0]!.url, /\/v1beta\/models\?/);
+    assert.ok(!seen[0]!.url.includes("secret-key"));
+    assert.equal(
+      (seen[0]!.init.headers as Record<string, string>)["x-goog-api-key"],
+      "secret-key",
+    );
+  });
+
+  it("strips the models/ prefix so ids match what Settings holds", async () => {
+    const { transport } = scripted(200, { models: [model("gemini-9-flash")] });
+    const found = await listModels({ key: "k", transport });
+    assert.deepEqual(found.map((entry) => entry.id), ["gemini-9-flash"]);
+  });
+
+  it("drops models that cannot generateContent", async () => {
+    const { transport } = scripted(200, {
+      models: [model("gemini-9-flash"), model("embedding-001", ["embedContent"])],
+    });
+    const found = await listModels({ key: "k", transport });
+    assert.deepEqual(found.map((entry) => entry.id), ["gemini-9-flash"]);
+  });
+
+  it("follows the page token, and stops when it runs out", async () => {
+    const pages: unknown[] = [
+      { models: [model("a")], nextPageToken: "second" },
+      { models: [model("b")] },
+    ];
+    let call = 0;
+    const seen: string[] = [];
+    const transport: GeminiTransport = async (url) => {
+      seen.push(url);
+      const body = pages[call] ?? {};
+      call += 1;
+      return new Response(JSON.stringify(body), { status: 200 });
+    };
+
+    const found = await listModels({ key: "k", transport });
+    assert.deepEqual(found.map((entry) => entry.id), ["a", "b"]);
+    assert.equal(seen.length, 2);
+    assert.ok(seen[1]!.includes("pageToken=second"));
+  });
+
+  it("does not loop forever on a server that always returns a token", async () => {
+    const transport: GeminiTransport = async () =>
+      new Response(JSON.stringify({ models: [model("a")], nextPageToken: "again" }), {
+        status: 200,
+      });
+    const found = await listModels({ key: "k", transport });
+    assert.equal(found.length, 5);
+  });
+
+  it("maps a refused key the same way a generation does", async () => {
+    const { transport } = scripted(400, {
+      error: { status: "INVALID_ARGUMENT", message: "API key not valid" },
+    });
+    await assert.rejects(
+      () => listModels({ key: "bad", transport }),
+      (error: unknown) => error instanceof GeminiError && error.reason === "auth",
+    );
+  });
+});
+
+describe("suggesting a replacement for a moved model id", () => {
+  const available = [
+    { id: "gemini-9-pro", methods: [] },
+    { id: "gemini-9-flash-002", methods: [] },
+    { id: "gemini-9-flash", methods: [] },
+    { id: "aqa", methods: [] },
+  ];
+
+  it("puts a version bump first, which is what a retired id usually became", () => {
+    assert.equal(closestModels("gemini-9-flash-001", available)[0], "gemini-9-flash-002");
+  });
+
+  it("still offers the family root, even when a longer id ranks above it", () => {
+    // Prefix length alone puts `-002` first here. That is fine: the point is
+    // that the author sees every plausible id, not that the order is perfect.
+    assert.ok(closestModels("gemini-9-flash-xyz", available).includes("gemini-9-flash"));
+  });
+
+  it("prefers the shorter id when two share the same prefix", () => {
+    const ranked = closestModels("gemini-9-flash", available);
+    assert.deepEqual(ranked.slice(0, 2), ["gemini-9-flash", "gemini-9-flash-002"]);
+  });
+
+  it("still answers when nothing resembles what was typed", () => {
+    assert.equal(closestModels("gpt-4", available).length, 4);
   });
 });
 

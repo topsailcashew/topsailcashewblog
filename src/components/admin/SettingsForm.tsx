@@ -480,7 +480,7 @@ export function SettingsForm({
             Text model
             <input
               value={ai.textModel}
-              placeholder="gemini-2.5-flash"
+              placeholder="gemini-3.8-flash"
               onChange={(event) => setAi({ ...ai, textModel: event.target.value })}
             />
           </label>
@@ -488,7 +488,7 @@ export function SettingsForm({
             Image model
             <input
               value={ai.imageModel}
-              placeholder="gemini-2.5-flash-image"
+              placeholder="gemini-3.1-flash-image"
               onChange={(event) => setAi({ ...ai, imageModel: event.target.value })}
             />
           </label>

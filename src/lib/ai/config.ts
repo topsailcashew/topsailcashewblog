@@ -33,9 +33,15 @@ export type AiSettings = {
 export const DEFAULT_AI: AiSettings = {
   enabled: false,
   apiKeyCipher: null,
-  textModel: "gemini-2.5-flash",
-  // "Nano Banana".
-  imageModel: "gemini-2.5-flash-image",
+  /*
+    Current as of September 2026, and certain to age. These are only the
+    fallback for a blog that has never opened Settings — a stored value wins,
+    and "Test connection" lists what the key can actually reach, so a retired
+    id here is a stale default rather than a broken install.
+  */
+  textModel: "gemini-3.8-flash",
+  // "Nano Banana 2".
+  imageModel: "gemini-3.1-flash-image",
 };
 
 export const loadAiSettings = cache(

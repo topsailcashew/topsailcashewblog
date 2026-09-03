@@ -192,26 +192,112 @@ export async function generateImage(options: {
   };
 }
 
+/* --- model discovery ------------------------------------------------------ */
+
+export type GeminiModel = {
+  /** The bare id, as it goes in Settings — `models/` stripped. */
+  id: string;
+  displayName?: string;
+  methods: string[];
+};
+
+type ModelsResponse = {
+  models?: { name?: string; displayName?: string; supportedGenerationMethods?: string[] }[];
+  nextPageToken?: string;
+};
+
+/**
+ * Every model this key can call.
+ *
+ * "No model called X" is a true statement that leaves the author nowhere to
+ * go, because the fix is an id they do not have. Google will hand over the
+ * list, and which ids exist depends on the key — the free tier, a billed
+ * project and a restricted key all see different sets, so there is no constant
+ * this could be replaced with.
+ *
+ * Filtered to `generateContent`, which is the only method anything here calls.
+ */
+export async function listModels(options: {
+  key: string;
+  timeoutMs?: number;
+  transport?: GeminiTransport;
+}): Promise<GeminiModel[]> {
+  const found: GeminiModel[] = [];
+  let pageToken: string | undefined;
+
+  // Paged, but bounded: a key with more than a few hundred models is not a
+  // thing, and an unbounded loop against a remote cursor is a hang.
+  for (let page = 0; page < 5; page += 1) {
+    const url = new URL(ENDPOINT);
+    url.searchParams.set("pageSize", "100");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+    const response = await send(
+      url.toString(),
+      { method: "GET" },
+      { key: options.key, timeoutMs: options.timeoutMs ?? 15_000, transport: options.transport },
+    );
+
+    const parsed = (await response.json().catch(() => null)) as ModelsResponse | null;
+    if (!response.ok) throw httpFailure(response.status, parsed as GeminiResponse | null, "models");
+    if (!parsed) throw new GeminiError("Gemini returned an unreadable model list", "malformed");
+
+    for (const model of parsed.models ?? []) {
+      const methods = model.supportedGenerationMethods ?? [];
+      if (!model.name || !methods.includes("generateContent")) continue;
+      found.push({
+        id: model.name.replace(/^models\//, ""),
+        displayName: model.displayName,
+        methods,
+      });
+    }
+
+    pageToken = parsed.nextPageToken;
+    if (!pageToken) break;
+  }
+
+  return found;
+}
+
+/**
+ * The ids worth showing someone who typed one that does not exist.
+ *
+ * Ranked by shared prefix with what they typed, so a moved id surfaces its own
+ * replacement first — `gemini-3.8-flash` puts `gemini-3.8-flash-002` at the
+ * top rather than burying it under an alphabetical list.
+ */
+export function closestModels(wanted: string, available: GeminiModel[], limit = 6): string[] {
+  const ids = available.map((model) => model.id);
+  const shared = (candidate: string) => {
+    let index = 0;
+    while (index < wanted.length && index < candidate.length && wanted[index] === candidate[index]) {
+      index += 1;
+    }
+    return index;
+  };
+  return [...ids]
+    .sort((a, b) => shared(b) - shared(a) || a.length - b.length || a.localeCompare(b))
+    .slice(0, limit);
+}
+
 /* --- transport ------------------------------------------------------------ */
 
-async function call(
-  model: string,
-  body: unknown,
+/**
+ * One request, with the key attached and every network failure named.
+ *
+ * The key goes in a header, never `?key=` — a key in a URL lands in every
+ * access log and every error report between here and Google.
+ */
+async function send(
+  url: string,
+  init: RequestInit,
   options: { key: string; timeoutMs: number; transport?: GeminiTransport },
-): Promise<GeminiResponse> {
-  const send = options.transport ?? ((url, init) => fetch(url, init));
-
-  let response: Response;
+): Promise<Response> {
+  const via = options.transport ?? ((target, request) => fetch(target, request));
   try {
-    response = await send(`${ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: {
-        // A header, never `?key=` — a key in a URL lands in every access log
-        // and every error report along the way.
-        "x-goog-api-key": options.key,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
+    return await via(url, {
+      ...init,
+      headers: { ...(init.headers as Record<string, string>), "x-goog-api-key": options.key },
       signal: AbortSignal.timeout(options.timeoutMs),
     });
   } catch (cause) {
@@ -226,6 +312,22 @@ async function call(
       "unavailable",
     );
   }
+}
+
+async function call(
+  model: string,
+  body: unknown,
+  options: { key: string; timeoutMs: number; transport?: GeminiTransport },
+): Promise<GeminiResponse> {
+  const response = await send(
+    `${ENDPOINT}/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    options,
+  );
 
   const parsed = (await response.json().catch(() => null)) as GeminiResponse | null;
   if (!response.ok) throw httpFailure(response.status, parsed, model);
