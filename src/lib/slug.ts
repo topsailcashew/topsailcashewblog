@@ -46,6 +46,16 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Top-level paths served by a file route, which `/[slug]` must not prerender.
+ *
+ * Distinct from `RESERVED_SLUGS`: those are refused on create, while these are
+ * slugs a page legitimately *has* — `about` and `newsletter` both name a real
+ * page row whose prose a bespoke route renders. Reserving them would make the
+ * admin unable to save the very page it describes.
+ */
+export const FILE_ROUTE_SLUGS: ReadonlySet<string> = new Set(["about", "newsletter"]);
+
+/**
  * Pick the first free slug in the series `base`, `base-2`, `base-3`, ...
  *
  * Posts and pages are checked together. They share the `/[slug]` route, and

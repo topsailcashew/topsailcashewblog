@@ -22,6 +22,8 @@ import {
   saveFediverseSettings,
 } from "@/lib/activitypub/keys";
 import { countFollowers } from "@/lib/activitypub/delivery";
+import { revalidatePath } from "next/cache";
+import { listPublishedSlugs } from "@/lib/public-posts";
 import { loadAiSettings, redactAi, saveAiSettings } from "@/lib/ai/config";
 
 export const dynamic = "force-dynamic";
@@ -86,6 +88,14 @@ export const PUT = handle(async (request: NextRequest) => {
       footer: body.newsletter.footer,
       doubleOptIn: body.newsletter.double_opt_in,
     });
+    /*
+      `/newsletter` renders the setting and every post page renders the signup
+      form beneath it, so both are wrong the moment this is saved. All of them
+      are ISR; without this, turning the newsletter on leaves the public site
+      saying there is no mailing list until each page's own window expires.
+    */
+    revalidatePath("/newsletter");
+    for (const slug of await listPublishedSlugs(db)) revalidatePath(`/${slug}`);
   }
 
   if (body.fediverse) {

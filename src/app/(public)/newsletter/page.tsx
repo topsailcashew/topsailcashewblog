@@ -6,7 +6,19 @@ import { loadNewsletterSettings } from "@/lib/email/config";
 import { getFeed } from "@/lib/public-posts";
 import { PostGrid } from "@/components/public/PostGrid";
 
-export const dynamic = "force-dynamic";
+/*
+  ISR, not `force-dynamic`, and that is load-bearing.
+
+  A `force-dynamic` page is not prerendered — so at build time `/[slug]`'s
+  `generateStaticParams` claimed `/newsletter` for the seeded database page
+  instead, and every request 500d with "Page with `dynamic = force-dynamic`
+  won't be rendered statically". Being prerenderable is what makes the file
+  route win the path. `/about` is the same arrangement for the same reason.
+
+  Settings changes invalidate this path immediately (see `PUT /api/settings`),
+  so the window is not a staleness window.
+*/
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Newsletter",

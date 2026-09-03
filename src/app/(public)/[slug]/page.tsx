@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { permanentRedirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getDb } from "@/db/client";
+import { FILE_ROUTE_SLUGS } from "@/lib/slug";
 import { Article } from "@/components/public/Article";
 import { CommentThread } from "@/components/public/CommentThread";
 import { SubscribeSection } from "@/components/public/SubscribeSection";
@@ -50,7 +51,15 @@ export async function generateStaticParams() {
       listPublishedSlugs(db),
       listPublishedPageSlugs(db),
     ]);
-    return [...postSlugs, ...pageSlugs].map((slug) => ({ slug }));
+    /*
+      A file route beats this one at request time, but it does not beat it
+      here: a page seeded at `newsletter` was prerendered under `/newsletter`
+      and shadowed the real route, which then threw on every request. Anything
+      with a route of its own is not this route's to render.
+    */
+    return [...postSlugs, ...pageSlugs]
+      .filter((slug) => !FILE_ROUTE_SLUGS.has(slug))
+      .map((slug) => ({ slug }));
   } catch {
     return [];
   }
