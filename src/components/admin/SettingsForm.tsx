@@ -42,7 +42,10 @@ export function SettingsForm({
   /* Held apart from `ai` for the same reason the SMTP password is. */
   const [apiKey, setApiKey] = useState("");
   const [aiTest, setAiTest] = useState<
-    { kind: "idle" } | { kind: "busy" } | { kind: "ok"; ms: number } | { kind: "error"; message: string }
+    | { kind: "idle" }
+    | { kind: "busy" }
+    | { kind: "ok"; ms: number; unsaved: boolean }
+    | { kind: "error"; message: string }
   >({ kind: "idle" });
   /**
    * Held apart from `smtp` on purpose. The stored password never reaches this
@@ -139,20 +142,30 @@ export function SettingsForm({
   const testAi = useCallback(async () => {
     setAiTest({ kind: "busy" });
     try {
-      const response = await fetch("/api/settings/ai/test", { method: "POST" });
+      // The ids as typed, not as stored. Testing a model you cannot see is
+      // how this reported a failure about an id that was no longer on screen.
+      const response = await fetch("/api/settings/ai/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          text_model: ai.textModel,
+          image_model: ai.imageModel,
+        }),
+      });
       const body = (await response.json().catch(() => ({}))) as {
         error?: string;
         latency_ms?: number;
+        unsaved?: boolean;
       };
       if (!response.ok) throw new Error(body.error ?? `Test failed (${response.status})`);
-      setAiTest({ kind: "ok", ms: body.latency_ms ?? 0 });
+      setAiTest({ kind: "ok", ms: body.latency_ms ?? 0, unsaved: Boolean(body.unsaved) });
     } catch (cause) {
       setAiTest({
         kind: "error",
         message: cause instanceof Error ? cause.message : "Test failed",
       });
     }
-  }, []);
+  }, [ai.imageModel, ai.textModel]);
 
   const sendTest = useCallback(async () => {
     setTestState({ kind: "busy" });
@@ -510,6 +523,7 @@ export function SettingsForm({
           {aiTest.kind === "ok" && (
             <span className="muted">
               {ai.textModel} answered in {aiTest.ms} ms.
+              {aiTest.unsaved ? " Save to start using it." : ""}
             </span>
           )}
         </div>

@@ -243,12 +243,21 @@ export async function listModels(options: {
     if (!parsed) throw new GeminiError("Gemini returned an unreadable model list", "malformed");
 
     for (const model of parsed.models ?? []) {
-      const methods = model.supportedGenerationMethods ?? [];
-      if (!model.name || !methods.includes("generateContent")) continue;
+      if (!model.name) continue;
+      /*
+        A model is dropped only when it *says* it cannot generate. Filtering on
+        `?? []` instead threw away every model whenever the field was absent,
+        which newer API versions leave off — the list came back empty, the
+        check upstream was skipped as "no list available", and the caller got
+        the same unhelpful 404 this function exists to replace. Absence of the
+        field is not evidence of absence of the capability.
+      */
+      const methods = model.supportedGenerationMethods;
+      if (methods && !methods.includes("generateContent")) continue;
       found.push({
         id: model.name.replace(/^models\//, ""),
         displayName: model.displayName,
-        methods,
+        methods: methods ?? [],
       });
     }
 

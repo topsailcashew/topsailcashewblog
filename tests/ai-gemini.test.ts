@@ -222,9 +222,20 @@ describe("listing the models a key can reach", () => {
     assert.deepEqual(found.map((entry) => entry.id), ["gemini-9-flash"]);
   });
 
-  it("drops models that cannot generateContent", async () => {
+  it("drops models that say they cannot generateContent", async () => {
     const { transport } = scripted(200, {
       models: [model("gemini-9-flash"), model("embedding-001", ["embedContent"])],
+    });
+    const found = await listModels({ key: "k", transport });
+    assert.deepEqual(found.map((entry) => entry.id), ["gemini-9-flash"]);
+  });
+
+  it("keeps a model that does not declare its methods at all", async () => {
+    // Newer API versions omit the field. Treating that as "cannot generate"
+    // emptied the list, which upstream reads as "no list available" — so the
+    // whole diagnostic silently turned itself off.
+    const { transport } = scripted(200, {
+      models: [{ name: "models/gemini-9-flash", displayName: "Flash" }],
     });
     const found = await listModels({ key: "k", transport });
     assert.deepEqual(found.map((entry) => entry.id), ["gemini-9-flash"]);
