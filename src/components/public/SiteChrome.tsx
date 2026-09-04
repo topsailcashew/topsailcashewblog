@@ -31,6 +31,9 @@ const FOOTER_LINKS = [
   { href: "/series", label: "Series" },
   { href: "/about", label: "About" },
   { href: "/newsletter", label: "Newsletter" },
+  // `/contact` is published and in the sitemap, so search engines could reach
+  // it while no reader could: nothing on the site linked to it.
+  { href: "/contact", label: "Contact" },
 ] as const;
 
 /**
