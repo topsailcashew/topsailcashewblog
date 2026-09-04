@@ -16,6 +16,7 @@ import { NavLinks } from "./NavLinks";
 const NAV_LINKS = [
   { href: "/articles", label: "Articles" },
   { href: "/about", label: "About" },
+  { href: "https://aluna-2-0.vercel.app/", label: "Aluna App" },
 ] as const;
 
 /**
