@@ -2186,24 +2186,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   app page that invented its own components would read as pasted in from a
   different site, which is the one thing it must not do.
 */
-.aluna-lede { max-width: var(--measure); padding-block: var(--s6) 0; }
-.aluna-lede p {
-  font-family: var(--serif);
-  font-size: var(--text-body);
-  line-height: 1.6;
-  margin: 0 0 var(--s4);
-}
-.aluna-lede p:first-child { font-size: clamp(1.25rem, 2.6vw, 1.5rem); line-height: 1.45; }
-
 .aluna-actions { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
-
-.aluna-section { max-width: var(--measure); padding-block: var(--s7) 0; }
-.aluna-section > p {
-  font-family: var(--serif);
-  font-size: var(--text-base);
-  line-height: 1.7;
-  margin: var(--s4) 0 0;
-}
 
 /* Three figures, because "eighty-two emotions" is the argument for the app in
    a way no adjective is. Set in the serif at display size; they are content,
@@ -2230,17 +2213,28 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
 .aluna-figure-of { font-family: var(--sans); font-size: var(--text-sm); }
 .aluna-figure-sub { font-family: var(--sans); font-size: var(--text-xs); color: var(--fg-muted); }
 
-/* The encryption claim is the reason to trust the thing, so it is set as a
-   statement rather than buried in the paragraph that explains it. */
-.aluna-claim {
-  font-family: var(--serif);
+/*
+  The body is now an editable page row, so the two treatments that used to be
+  hand-written classes have to come from what the editor can actually produce:
+  the opening paragraph, and a blockquote.
+*/
+.aluna-prose { max-width: var(--measure); padding-top: var(--s6); }
+.aluna-prose > p:first-child { font-size: clamp(1.25rem, 2.6vw, 1.5rem); line-height: 1.45; }
+.aluna-prose h2 {
+  font-size: var(--text-xl);
+  padding-top: var(--s5);
+  border-top: 1px solid var(--border);
+}
+/* A pull-quote here is a claim being made plainly, not someone else being
+   quoted — so it takes the accent and stays upright rather than italic. */
+.aluna-prose blockquote {
+  border-left-color: var(--accent);
+  border-left-width: 2px;
+  color: var(--fg);
+  font-style: normal;
   font-size: clamp(1.15rem, 2.2vw, 1.35rem);
   line-height: 1.5;
-  margin: var(--s4) 0 0;
-  padding-left: var(--s4);
-  border-left: 2px solid var(--accent);
 }
-.aluna-privacy .aluna-fineprint { font-size: var(--text-sm); color: var(--fg-muted); }
 
 /* Not decoration: an app about how you feel has to say plainly that it is not
    care, and it has to be legible where someone will actually read it. */

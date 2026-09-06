@@ -53,7 +53,7 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
  * page row whose prose a bespoke route renders. Reserving them would make the
  * admin unable to save the very page it describes.
  */
-export const FILE_ROUTE_SLUGS: ReadonlySet<string> = new Set(["about", "newsletter"]);
+export const FILE_ROUTE_SLUGS: ReadonlySet<string> = new Set(["about", "newsletter", "aluna"]);
 
 /**
  * Pick the first free slug in the series `base`, `base-2`, `base-3`, ...
