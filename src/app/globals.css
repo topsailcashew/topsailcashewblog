@@ -2175,3 +2175,96 @@ input:focus, textarea:focus, select:focus { border-color: var(--fg); }
   height: 0.55rem;
   margin-right: 0.3rem;
 }
+
+/* ===========================================================================
+   ALUNA — the app description page
+   ========================================================================= */
+
+/*
+  A reading page, not a product splash. It uses the same measure as an article
+  because it is mostly prose, and the same buttons as everywhere else — an
+  app page that invented its own components would read as pasted in from a
+  different site, which is the one thing it must not do.
+*/
+.aluna-lede { max-width: var(--measure); padding-block: var(--s6) 0; }
+.aluna-lede p {
+  font-family: var(--serif);
+  font-size: var(--text-body);
+  line-height: 1.6;
+  margin: 0 0 var(--s4);
+}
+.aluna-lede p:first-child { font-size: clamp(1.25rem, 2.6vw, 1.5rem); line-height: 1.45; }
+
+.aluna-actions { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
+
+.aluna-section { max-width: var(--measure); padding-block: var(--s7) 0; }
+.aluna-section > p {
+  font-family: var(--serif);
+  font-size: var(--text-base);
+  line-height: 1.7;
+  margin: var(--s4) 0 0;
+}
+
+/* Three figures, because "eighty-two emotions" is the argument for the app in
+   a way no adjective is. Set in the serif at display size; they are content,
+   not chrome. */
+.aluna-figures {
+  list-style: none;
+  margin: var(--s7) 0 0;
+  padding: var(--s5) 0 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s5);
+  max-width: var(--measure);
+}
+.aluna-figures li { display: flex; flex-direction: column; gap: var(--s1); }
+.aluna-figure-n {
+  font-family: var(--serif);
+  font-size: clamp(2rem, 6vw, 3rem);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.aluna-figure-of { font-family: var(--sans); font-size: var(--text-sm); }
+.aluna-figure-sub { font-family: var(--sans); font-size: var(--text-xs); color: var(--fg-muted); }
+
+/* The encryption claim is the reason to trust the thing, so it is set as a
+   statement rather than buried in the paragraph that explains it. */
+.aluna-claim {
+  font-family: var(--serif);
+  font-size: clamp(1.15rem, 2.2vw, 1.35rem);
+  line-height: 1.5;
+  margin: var(--s4) 0 0;
+  padding-left: var(--s4);
+  border-left: 2px solid var(--accent);
+}
+.aluna-privacy .aluna-fineprint { font-size: var(--text-sm); color: var(--fg-muted); }
+
+/* Not decoration: an app about how you feel has to say plainly that it is not
+   care, and it has to be legible where someone will actually read it. */
+.aluna-disclaimer {
+  margin-top: var(--s7);
+  padding: var(--s5);
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+.aluna-disclaimer p { margin: 0; font-size: var(--text-sm); line-height: 1.65; }
+
+.aluna-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s5);
+  margin-top: var(--s7);
+  padding-block: var(--s5) var(--s8);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 34rem) {
+  /* Three figures side by side stop being readable well before the numbers
+     stop fitting. */
+  .aluna-figures { grid-template-columns: 1fr; gap: var(--s4); }
+}

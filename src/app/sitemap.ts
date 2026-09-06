@@ -42,6 +42,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         changeFrequency: "daily",
         priority: 0.8,
       },
+      {
+        url: absoluteUrl("/aluna"),
+        changeFrequency: "yearly" as const,
+        priority: 0.5,
+      },
       ...posts.map((post) => ({
         url: absoluteUrl(`/${post.slug}`),
         lastModified: new Date(post.published_at ?? post.created_at),

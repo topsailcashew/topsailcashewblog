@@ -16,7 +16,10 @@ import { NavLinks } from "./NavLinks";
 const NAV_LINKS = [
   { href: "/articles", label: "Articles" },
   { href: "/about", label: "About" },
-  { href: "https://aluna-2-0.vercel.app/", label: "Aluna App" },
+  // The description page, not the app: a stranger clicking this from a blog
+  // deserves to learn what Aluna is before being asked for an email address,
+  // and the app itself opens straight onto a sign-in form.
+  { href: "/aluna", label: "Aluna App" },
 ] as const;
 
 /**
